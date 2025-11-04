@@ -1,6 +1,6 @@
 # Simulated Environemnt for Agent Training 
 
-This repository contains the training pipelines for the paper: [Simulating Environments with Reasoning Models for Agent Training](https://arxiv.org/abs/2511.01824).
+This repository contains the code implementation for the paper: [Simulating Environments with Reasoning Models for Agent Training](https://arxiv.org/abs/2511.01824).
 
 ## Repository Structure
 

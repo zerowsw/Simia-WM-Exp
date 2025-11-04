@@ -1,6 +1,6 @@
 # Tau2 Data Processing and Generation Tool
 
-Tau2 is a toolkit for generating and processing Agent Airline and Retail training data, supporting data cleaning, format conversion, and conversation generation.
+This repo is a toolkit for generating and processing Agent Airline and Retail training data, supporting data cleaning, format conversion, and conversation generation. Note: If you are evaluating our Qwen3 models on Tau2-Bench, please select the non-thinking mode.
 
 ## Quick Start
 

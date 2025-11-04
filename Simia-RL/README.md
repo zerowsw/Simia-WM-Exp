@@ -105,6 +105,7 @@ trainer:
 ```
 
 Checkpoints saved at: `outputs/checkpoints/Simia-RL-8B-tau2-APIGen-MT/step_X/`
+Note: If you are evaluating our Qwen3 models on Tau^2 Bench, please select the non-thinking mode.
 
 
 ## Outputs and Logs
