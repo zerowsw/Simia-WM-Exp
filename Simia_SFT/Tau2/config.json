@@ -1,5 +1,5 @@
 {
-  "azure_endpoint": "https://ai-m365researchefficientaieus2212654625773.cognitiveservices.azure.com/",
+  "azure_endpoint": "",
   "api_version": "2025-04-01-preview",
   "deployment": "gpt-5",
   "output_settings": {
