@@ -12,6 +12,7 @@ Reinforcement learning training module based on GRPO algorithm, using GPT as env
 
 ```bash
 # 1. Install dependencies
+cd Simia-RL
 bash setup_local.sh
 
 # 2. Configure environment variables
@@ -27,7 +28,6 @@ bash run_simulated_env_RL.sh
 Modify configuration directly in run_simulated_env_RL.sh
 
 ```bash
-```
 # Model configuration
 model_path: Simia-Agent/Simia-Tau-SFT-Qwen3-8B
 micro_batch_size_per_gpu: 1
@@ -52,7 +52,6 @@ custom_envs:
       train_data_path: "./APIGen_5k_processed.json"
       deployment: "gpt-5"
       max_simulation_steps: 100
-```
 ```
 
 
