@@ -45,7 +45,7 @@ tau2 run \
 
 ## Notes
 
-⚠️ Tau2-Bench evaluation results have high variance. It is recommended to run **4 repeated trials and take the average** for stable and converged results.
+⚠️ Tau2-Bench evaluation results have high variance. It is recommended to run **4 repeated trials and take the average** for stable and converged results. If you are evaluating our Qwen3 models on Tau2-Bench, please select the non-thinking mode.
 
 ## Citation
 
