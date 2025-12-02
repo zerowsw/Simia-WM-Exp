@@ -38,6 +38,6 @@ Our internal implementation differs from the official OfficeBench codebase in th
 
 ## Important Notes
 
-⚠️ **Local Path Generation**: Our SFT data format is based on the modified codebase above. As a result, the trained model [Simia-Agent/Simia-OfficeBench-SFT-Qwen3-8B](https://huggingface.co/Simia-Agent/Simia-OfficeBench-SFT-Qwen3-8B) may be overfitted to local execution paths, making **the generation format of our model different from that in the official OfficeBench implementation, resulting in different evaluation scores**.
+⚠️ **Local Path Generation**: Our SFT data format is based on the modified codebase above. As a result, the trained model [Simia-Agent/Simia-OfficeBench-SFT-Qwen3-8B](https://huggingface.co/Simia-Agent/Simia-OfficeBench-SFT-Qwen3-8B) may be overfitted to local execution patterns, making **the generation format of our model different from that in the official OfficeBench implementation, resulting in different evaluation scores**.
 
 ⚠️ **High Variance**: There may be large variance in results, especially for **3-apps tasks**. We recommend running multiple evaluations to get reliable estimates.
