@@ -1,0 +1,29 @@
+# This is a base config file for an experiment (for all tasks within an experiment)
+
+# EXPERIMENT CONFIGS
+experiment:
+  exp_id: "$exp_id"
+  model_id: "$model_id"
+  evaluation: "online" # "online" or "offline", if "offline", fill in the split, TODO: add split
+  memory: False # True or False, if True, fill in the memory config and allow the agent to store memories
+  use_thinking_tokens: $use_thinking_tokens # True or False, if True, the env expects <think>...</think>\nanswer>...</answer> format
+  use_scratchpad: $use_scratchpad
+# TASK CONFIGS
+env:
+  max_iter: 25 # max 20 steps by default
+
+docker:
+  docker_name: "officebench"
+  dockerfile_path: "./docker/Dockerfile"
+
+
+# MODEL CONFIGS
+model:
+  id: "$model_id"
+  name: "$model_name"
+  memory:
+    mode: null
+
+
+#prompt_file: "configs/prompts.json"
+prompt_file: "$prompt_file"

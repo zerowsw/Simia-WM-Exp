@@ -1,0 +1,4 @@
+# a list of all models and their full names
+model:  
+  Simia-OfficeBench-SFT-Qwen3-8B:
+    name: "Simia-Agent/Simia-OfficeBench-SFT-Qwen3-8B"
