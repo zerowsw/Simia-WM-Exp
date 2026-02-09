@@ -37,6 +37,7 @@ class ShareGPTGenerator:
         self.output_settings = self.config_manager.get_output_settings()
         self.gpt_log_settings = self.config_manager.get_gpt_log_settings()
         self.sample_data_path = self.config_manager.get_sample_data_path()
+        self.simulator_mode = self.config_manager.get_simulator_mode()
         
 
         self.full_output_path = self.config_manager.get_full_output_path()
@@ -59,7 +60,8 @@ class ShareGPTGenerator:
             self.generation_settings,
             self.data_loader,
             self.gpt_logger,
-            self.api_type
+            self.api_type,
+            simulator_mode=self.simulator_mode,
         )
         
         self.progress_manager = ProgressManager(

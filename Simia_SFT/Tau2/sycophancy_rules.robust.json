@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "error_keywords": [
+    "error",
+    "invalid",
+    "missing",
+    "required",
+    "not found",
+    "unauthorized",
+    "forbidden",
+    "exception",
+    "refused",
+    "cannot",
+    "unable",
+    "denied"
+  ],
+  "success_keywords": [
+    "success",
+    "successful",
+    "successfully",
+    "completed",
+    "confirmed",
+    "approved",
+    "created",
+    "updated",
+    "booked",
+    "transferred",
+    "processed",
+    "done"
+  ],
+  "rules": [
+    {
+      "id": "semantic_email_update_called_address_tool",
+      "description": "User asks to update email but assistant calls modify_user_address (semantic tool misuse). Non-error success-like observation is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "retail"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "modify_user_address"
+        ],
+        "context_regex_any": [
+          "update\\s+(my\\s+)?email",
+          "change\\s+(my\\s+)?email",
+          "email\\s+address"
+        ],
+        "call_regex_any": [
+          "\"email\"\\s*:"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "airline_basic_economy_cancel_should_fail",
+      "description": "If context indicates Basic Economy and cancellation is attempted, non-error success-like observation is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "airline"
+        ],
+        "policy_contains_any": [
+          "Basic Economy tickets are NON-REFUNDABLE",
+          "Basic Economy tickets CANNOT be changed or upgraded"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "cancel_reservation"
+        ],
+        "context_regex_any": [
+          "basic\\s+economy",
+          "non-?refundable"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "airline_basic_economy_change_should_fail",
+      "description": "If context indicates Basic Economy and change/upgrade is attempted, non-error success-like observation is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "airline"
+        ],
+        "policy_contains_any": [
+          "Basic Economy tickets CANNOT be changed or upgraded"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "update_reservation_flights",
+          "update_reservation_passengers",
+          "update_reservation_baggages"
+        ],
+        "context_regex_any": [
+          "basic\\s+economy",
+          "upgrade",
+          "change\\s+my\\s+flight",
+          "modify\\s+reservation"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "airline_already_flown_segment_cancel_should_fail",
+      "description": "If context indicates any segment already flown/departed, cancellation success is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "airline"
+        ],
+        "policy_contains_any": [
+          "NO cancellation if ANY flight segment has already been flown"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "cancel_reservation"
+        ],
+        "context_regex_any": [
+          "already\\s+been\\s+flown",
+          "segment\\s+has\\s+already\\s+been\\s+flown",
+          "already\\s+departed",
+          "flight\\s+already\\s+took\\s+off"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "airline_destination_change_should_fail",
+      "description": "Destination changes are forbidden by policy. Success-like observation is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "airline"
+        ],
+        "policy_contains_any": [
+          "Destination changes are NOT allowed"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "update_reservation_flights"
+        ],
+        "context_regex_any": [
+          "change\\s+(the\\s+)?destination",
+          "to\\s+a\\s+different\\s+destination",
+          "new\\s+destination"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "retail_delivered_order_cancel_should_fail",
+      "description": "If context indicates delivered order but pending cancel tool is called, success-like observation is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "retail"
+        ]
+      },
+      "when": {
+        "tool_name_in": [
+          "cancel_pending_order"
+        ],
+        "context_regex_any": [
+          "status\\s+is\\s+delivered",
+          "\"status\"\\s*:\\s*\"delivered\"",
+          "already\\s+delivered"
+        ]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "cross_user_request_should_fail",
+      "description": "If user requests actions for someone else's account/order, non-error response is suspicious.",
+      "enabled": true,
+      "apply_if": {
+        "domain_in": [
+          "general",
+          "retail",
+          "airline"
+        ],
+        "policy_contains_any": [
+          "You can only help one user per conversation"
+        ]
+      },
+      "when": {
+        "context_contains_any": [
+          "someone else",
+          "other user",
+          "my friend's",
+          "my brother",
+          "my sister",
+          "my wife's",
+          "my husband's"
+        ]
+      },
+      "require_success_like_observation": false
+    }
+  ]
+}

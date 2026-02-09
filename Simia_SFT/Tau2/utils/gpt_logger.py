@@ -54,7 +54,8 @@ class GPTLogger:
             print(f"⚠️ Failed to initialize GPT log file: {e}")
     
     def log_gpt_call(self, prompt: str, response: str, sample_id: str = "", attempt: int = 1, 
-                     error: Optional[str] = None, duration: float = 0.0, tokens_used: Optional[dict] = None):
+                     error: Optional[str] = None, duration: float = 0.0, tokens_used: Optional[dict] = None,
+                     metadata: Optional[Dict[str, Any]] = None):
         """Log GPT call"""
         if not self.enable_logging:
             return
@@ -66,6 +67,7 @@ class GPTLogger:
                 "attempt": attempt,
                 "duration_seconds": duration,
                 "tokens_used": tokens_used or {},
+                "metadata": metadata or {},
                 "prompt": prompt,
                 "response": response,
                 "error": error,

@@ -1,0 +1,248 @@
+{
+  "inputs": [
+    "output/tau2_base_error_80.json",
+    "output/tau2_strict_error_80.json",
+    "output/tau2_sycophantic_error_80.json"
+  ],
+  "summary": {
+    "tau2_base_error_80.json": {
+      "conversations": 80,
+      "function_calls": 274,
+      "observations": 274,
+      "error_like_observations": 8,
+      "success_like_observations": 42,
+      "schema_invalid_calls": 0,
+      "schema_invalid_but_non_error_obs": 0,
+      "extra_arg_keys_calls": 0,
+      "extra_arg_keys_but_non_error_obs": 0,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 0,
+      "declared_tool_unknown_or_diff": 0
+    },
+    "tau2_strict_error_80.json": {
+      "conversations": 80,
+      "function_calls": 260,
+      "observations": 267,
+      "error_like_observations": 13,
+      "success_like_observations": 46,
+      "schema_invalid_calls": 0,
+      "schema_invalid_but_non_error_obs": 0,
+      "extra_arg_keys_calls": 0,
+      "extra_arg_keys_but_non_error_obs": 0,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 0,
+      "declared_tool_unknown_or_diff": 0
+    },
+    "tau2_sycophantic_error_80.json": {
+      "conversations": 80,
+      "function_calls": 280,
+      "observations": 288,
+      "error_like_observations": 7,
+      "success_like_observations": 24,
+      "schema_invalid_calls": 1,
+      "schema_invalid_but_non_error_obs": 1,
+      "extra_arg_keys_calls": 1,
+      "extra_arg_keys_but_non_error_obs": 1,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 1,
+      "declared_tool_unknown_or_diff": 1
+    }
+  },
+  "findings": [
+    {
+      "kind": "declared_tool_unknown_or_diff",
+      "input_path": "output/tau2_sycophantic_error_80.json",
+      "conv_idx": 52,
+      "based_on_sample": "apigen_general_-5293745982730471031",
+      "domain": "general",
+      "simulator_mode": "sycophantic",
+      "turn_idx": 9,
+      "tool_name": "modify_user_address",
+      "problems": [
+        "declared=modify_user_email",
+        "actual=modify_user_address",
+        "declared_in_tool_list=False"
+      ],
+      "function_call_raw": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}",
+      "function_call_parsed": {
+        "name": "modify_user_address",
+        "arguments": {
+          "user_id": "emma_johnson_3009",
+          "email": "emma_new@example.com"
+        }
+      },
+      "observation_raw": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}",
+      "observation_is_error_like": null,
+      "observation_is_success_like": null,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Thank you for the information. I'll proceed with updating your email address to emma_new@example.com. Could you please confirm this change?"
+        },
+        {
+          "from": "human",
+          "value": "Yes, please go ahead with the update."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}"
+        },
+        {
+          "from": "gpt",
+          "value": "Your email address has been successfully updated to emma_new@example.com. If there is anything else you need or any other way I can assist you, just let me know!"
+        }
+      ]
+    },
+    {
+      "kind": "think_actual_tool_mismatch",
+      "input_path": "output/tau2_sycophantic_error_80.json",
+      "conv_idx": 52,
+      "based_on_sample": "apigen_general_-5293745982730471031",
+      "domain": "general",
+      "simulator_mode": "sycophantic",
+      "turn_idx": 9,
+      "tool_name": "modify_user_address",
+      "problems": [
+        "declared=modify_user_email",
+        "actual=modify_user_address"
+      ],
+      "function_call_raw": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}",
+      "function_call_parsed": {
+        "name": "modify_user_address",
+        "arguments": {
+          "user_id": "emma_johnson_3009",
+          "email": "emma_new@example.com"
+        }
+      },
+      "observation_raw": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}",
+      "observation_is_error_like": null,
+      "observation_is_success_like": null,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Thank you for the information. I'll proceed with updating your email address to emma_new@example.com. Could you please confirm this change?"
+        },
+        {
+          "from": "human",
+          "value": "Yes, please go ahead with the update."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}"
+        },
+        {
+          "from": "gpt",
+          "value": "Your email address has been successfully updated to emma_new@example.com. If there is anything else you need or any other way I can assist you, just let me know!"
+        }
+      ]
+    },
+    {
+      "kind": "schema_invalid_but_non_error_observation",
+      "input_path": "output/tau2_sycophantic_error_80.json",
+      "conv_idx": 52,
+      "based_on_sample": "apigen_general_-5293745982730471031",
+      "domain": "general",
+      "simulator_mode": "sycophantic",
+      "turn_idx": 9,
+      "tool_name": "modify_user_address",
+      "problems": [
+        "missing required arg: address1",
+        "missing required arg: address2",
+        "missing required arg: city",
+        "missing required arg: state",
+        "missing required arg: country",
+        "missing required arg: zip"
+      ],
+      "function_call_raw": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}",
+      "function_call_parsed": {
+        "name": "modify_user_address",
+        "arguments": {
+          "user_id": "emma_johnson_3009",
+          "email": "emma_new@example.com"
+        }
+      },
+      "observation_raw": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}",
+      "observation_is_error_like": false,
+      "observation_is_success_like": true,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Thank you for the information. I'll proceed with updating your email address to emma_new@example.com. Could you please confirm this change?"
+        },
+        {
+          "from": "human",
+          "value": "Yes, please go ahead with the update."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}"
+        },
+        {
+          "from": "gpt",
+          "value": "Your email address has been successfully updated to emma_new@example.com. If there is anything else you need or any other way I can assist you, just let me know!"
+        }
+      ]
+    },
+    {
+      "kind": "extra_arg_keys_but_non_error_observation",
+      "input_path": "output/tau2_sycophantic_error_80.json",
+      "conv_idx": 52,
+      "based_on_sample": "apigen_general_-5293745982730471031",
+      "domain": "general",
+      "simulator_mode": "sycophantic",
+      "turn_idx": 9,
+      "tool_name": "modify_user_address",
+      "problems": [
+        "extra_arg_keys=['email']"
+      ],
+      "function_call_raw": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}",
+      "function_call_parsed": {
+        "name": "modify_user_address",
+        "arguments": {
+          "user_id": "emma_johnson_3009",
+          "email": "emma_new@example.com"
+        }
+      },
+      "observation_raw": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}",
+      "observation_is_error_like": false,
+      "observation_is_success_like": true,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Thank you for the information. I'll proceed with updating your email address to emma_new@example.com. Could you please confirm this change?"
+        },
+        {
+          "from": "human",
+          "value": "Yes, please go ahead with the update."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo update Emma's email address, I need to call the modify_user_email function with the current user ID and the new email address details. I will call the function modify_user_email.\n</think>\n{\"name\": \"modify_user_address\", \"arguments\": {\"user_id\": \"emma_johnson_3009\", \"email\": \"emma_new@example.com\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"message\": \"Email address has been successfully updated to emma_new@example.com\", \"user_id\": \"emma_johnson_3009\"}"
+        },
+        {
+          "from": "gpt",
+          "value": "Your email address has been successfully updated to emma_new@example.com. If there is anything else you need or any other way I can assist you, just let me know!"
+        }
+      ]
+    }
+  ]
+}

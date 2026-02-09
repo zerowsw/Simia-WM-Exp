@@ -1,5 +1,11 @@
-
 #!/bin/bash
+
+# Portable sed -i: macOS (BSD) requires sed -i '' for in-place; Linux uses sed -i
+if [[ "$(uname)" == "Darwin" ]]; then
+  SED_INPLACE=(sed -i '')
+else
+  SED_INPLACE=(sed -i)
+fi
 
 # Define the list of models to test
 models=(
@@ -26,21 +32,21 @@ for model in "${models[@]}"; do
 
     # Update model name in vllm_server_config.yaml
     echo "Updating vllm server configuration..."
-    sed -i "s|^model:.*|model: $model|" vllm_server_config.yaml
+    "${SED_INPLACE[@]}" "s|^model:.*|model: $model|" vllm_server_config.yaml
     
     # Update tool-call-parser based on model name
     if [[ "$model" == *"xlam"* || "$model" == *"xLAM"* ]]; then
         echo "Detected xlam model, setting tool-call-parser to xlam..."
-        sed -i "/^tool-call-parser:/d" vllm_server_config.yaml
-        sed -i "/^tool-parser-plugin:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-call-parser:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-parser-plugin:/d" vllm_server_config.yaml
         echo "tool-call-parser: xlam" >> vllm_server_config.yaml
-        sed -i "/^chat-template:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^chat-template:/d" vllm_server_config.yaml
     elif [[ "$model" == *"llama"* || "$model" == *"Llama"* ]]; then
         echo "Detected Llama model, using fixed llama3_json parser..."
-        sed -i "/^tool-call-parser:/d" vllm_server_config.yaml
-        sed -i "/^tool-parser-plugin:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-call-parser:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-parser-plugin:/d" vllm_server_config.yaml
         echo "tool-call-parser: llama3_json" >> vllm_server_config.yaml
-        sed -i "/^chat-template:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^chat-template:/d" vllm_server_config.yaml
         if [[ "$model" == *"llama"*"3.1"* || "$model" == *"Llama"*"3.1"* || "$model" == *"llama3-8B"* ]]; then
             echo "Detected Llama 3.1 model, adding chat-template..."
             echo "chat-template: tool_chat_template_llama3.1_json.jinja" >> vllm_server_config.yaml
@@ -50,15 +56,15 @@ for model in "${models[@]}"; do
         fi
     elif [[ "$model" == *"qwen"* || "$model" == *"Qwen"* ]]; then
         echo "Detected Qwen model, setting tool-call-parser to hermes..."
-        sed -i "/^tool-parser-plugin:/d" vllm_server_config.yaml
-        sed -i "/^tool-call-parser:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-parser-plugin:/d" vllm_server_config.yaml
+        "${SED_INPLACE[@]}" "/^tool-call-parser:/d" vllm_server_config.yaml
         echo "tool-call-parser: hermes" >> vllm_server_config.yaml
         if [[ "$model" == *"qwen3-8b"* || "$model" == *"Qwen3-8B"* ]]; then
             echo "Detected Qwen3 model, adding chat-template..."
-            sed -i "/^chat-template:/d" vllm_server_config.yaml
+            "${SED_INPLACE[@]}" "/^chat-template:/d" vllm_server_config.yaml
             echo "chat-template: qwen3_nonthinking.jinja" >> vllm_server_config.yaml
         else
-            sed -i "/^chat-template:/d" vllm_server_config.yaml
+            "${SED_INPLACE[@]}" "/^chat-template:/d" vllm_server_config.yaml
         fi
     fi
 

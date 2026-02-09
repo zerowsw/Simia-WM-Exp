@@ -18,12 +18,16 @@ class ConversationGenerator:
     """Agent Trajectory conversation generator"""
     
     def __init__(self, api_config: Dict[str, Any], generation_settings: Dict[str, Any], 
-                 data_loader: DataLoader, gpt_logger: GPTLogger, api_type: str = 'azure'):
+                 data_loader: DataLoader, gpt_logger: GPTLogger, api_type: str = 'azure',
+                 simulator_mode: str = "base"):
         self.api_config = api_config
         self.api_type = api_type.lower()
         self.generation_settings = generation_settings
         self.data_loader = data_loader
         self.gpt_logger = gpt_logger
+        self.simulator_mode = str(simulator_mode).strip().lower() if simulator_mode is not None else "base"
+        if self.simulator_mode not in {"base", "strict", "sycophantic"}:
+            self.simulator_mode = "base"
         
         # Initialize client based on API type
         if self.api_type == 'azure':
@@ -112,7 +116,8 @@ class ConversationGenerator:
         return {"conversations": [], "tools": sample.get('tools', ''), "system": sample.get('system', ''),
                 "based_on_sample": sample_id, 
                 "sample_turns": len(sample.get('conversations', [])), "generated_turns": 0,
-                "sample_question": self.data_loader.extract_question_from_sample(sample), "domain": domain}
+                "sample_question": self.data_loader.extract_question_from_sample(sample), "domain": domain,
+                "simulator_mode": self.simulator_mode}
     
     def generate_conversation_with_gpt(self, sample: Dict[str, Any], attempt: int = 1) -> Dict[str, Any]:
         """Generate new conversation using GPT, based on given APIGen sample"""
@@ -188,7 +193,8 @@ class ConversationGenerator:
                 sample_id=sample_id,
                 attempt=attempt,
                 duration=duration,
-                tokens_used=tokens_used
+                tokens_used=tokens_used,
+                metadata={"pipeline": "sft_tau2", "simulator_mode": self.simulator_mode}
             )
             
             result = self.parse_gpt_response(response_content)
@@ -199,6 +205,7 @@ class ConversationGenerator:
             result['sample_turns'] = sample_turns
             result['generated_turns'] = len(result.get('conversations', []))
             result['domain'] = domain
+            result['simulator_mode'] = self.simulator_mode
             
 
             result['sample_question'] = sample_question
@@ -216,22 +223,48 @@ class ConversationGenerator:
                 sample_id=sample_id,
                 attempt=attempt,
                 error=error_msg,
-                duration=duration
+                duration=duration,
+                metadata={"pipeline": "sft_tau2", "simulator_mode": self.simulator_mode}
             )
             
             print(f"GPT call failed: {e}")
             return {"conversations": [], "tools": sample.get('tools', ''), "system": sample.get('system', ''),
                    "based_on_sample": sample_id, 
                    "sample_turns": sample_turns, "generated_turns": 0, 
-                   "sample_question": sample_question, "domain": domain}
+                   "sample_question": sample_question, "domain": domain,
+                   "simulator_mode": self.simulator_mode}
     
     def build_agent_trajectory_generation_prompt(self, sample_question: str, sample_text: str, available_tools: str = "") -> str:
         is_retail_sample = "Retail" in sample_text or "retail" in sample_text.lower()
         is_airline_sample = "airline" in sample_text.lower()
         
+        # Build mode-specific instructions (only injected for strict/sycophantic)
+        if self.simulator_mode == "strict":
+            mode_block = """
+## SIMULATOR_MODE: strict
+You are operating in STRICT simulator mode.
+- Treat tools as strict APIs. Do NOT repair or infer missing/invalid arguments.
+- If a tool call is invalid (wrong tool, missing required args, wrong arg types/format), the OBSERVATION MUST be an explicit error with a concrete reason.
+- If the assistant attempts an action that violates any policy or constraint in the example style, the outcome MUST be a denial/failure (no success).
+- When returning errors, include a brief reason + the minimal fix needed.
+"""
+        elif self.simulator_mode == "sycophantic":
+            mode_block = """
+## SIMULATOR_MODE: sycophantic
+You are operating in SYCOPHANTIC (lenient) simulator mode.
+- If intent is clear, you MAY repair minor issues: missing optional args, small ID typos, or obvious formatting mistakes.
+- You MAY infer missing details only when they are unambiguous from context.
+- Still enforce hard constraints (e.g., missing required args, invalid tool name, violating explicit policy like "cannot refund Basic Economy").
+- Prefer successful outcomes unless failure is unavoidable.
+- OBSERVATION must be tool-style output (structured, API-like). Do NOT paraphrase or summarize in natural language.
+"""
+        else:
+            # base mode: no extra instructions injected
+            mode_block = ""
+        
         if is_retail_sample:
             prompt = f"""You are an AI assistant that generates multi-turn conversation data for agent training. Your task is to create new agent trajectories based on existing examples.
-
+{mode_block}
 ## Example Trajectory:
 {sample_text}
 
@@ -299,7 +332,7 @@ ASSISTANT: [assistant reply content]
 """
         elif is_airline_sample:
             prompt = f"""You are an AI assistant that generates multi-turn conversation data for agent training. Your task is to create new agent trajectories based on existing examples.
-
+{mode_block}
 ## Example Trajectory:
 {sample_text}
 

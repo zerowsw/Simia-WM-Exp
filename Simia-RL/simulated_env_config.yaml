@@ -95,6 +95,7 @@ custom_envs:
       max_tokens: 60000
       retry_attempts: 3
       timeout: 600
+      simulator_mode: "base"
       max_simulation_steps: 100
       reward_on_success: 1.0
       reward_on_failure: 0.0

@@ -4,11 +4,32 @@ Tau2-Bench is a benchmark for evaluating tool call of Agent models.
 
 This evaluation used the [official tau2-bench repository](https://github.com/sierra-research/tau2-bench).
 
+## Prerequisites
+
+- **Python ≥3.10** (required by this package)
+- For full evaluation: **vLLM** (to serve the agent model locally) and **NVIDIA GPU** (Linux recommended)
+
 ## Installation
 
-```bash
-pip install -e .
-```
+1. Use Python 3.10+ (create a venv if your default `python3` is older):
+
+   ```bash
+   python3.10 -m venv .venv   # or python3.12 -m venv .venv
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   ```
+
+2. Install the tau2 package and dependencies:
+
+   ```bash
+   pip install -e .
+   ```
+
+3. (Optional) For running `eval.sh` with a local agent model, install vLLM and set `VLLM_BIN` if needed:
+
+   ```bash
+   pip install vllm
+   # If vllm is not on PATH: export VLLM_BIN=/path/to/your/venv/bin/vllm
+   ```
 
 ## Configuration
 

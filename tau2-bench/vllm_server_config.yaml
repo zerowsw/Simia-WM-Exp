@@ -4,7 +4,8 @@ port: 8000
 uvicorn-log-level: "debug"
 max-model-len: 16000
 gpu-memory-utilization: 0.8
-tensor-parallel-size: 4
+# Use 1 for single GPU or Apple Silicon (M1/M2/M3/M4); use 4 for 4x NVIDIA GPUs
+tensor-parallel-size: 1
 dtype: auto
 enable-log-requests: true
 enable-log-outputs: true

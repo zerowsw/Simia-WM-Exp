@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-02-05T22:07:57.541637",
+  "total_conversations": 5,
+  "target_count": 5,
+  "config_hash": "a2716d0a",
+  "last_successful_index": 4,
+  "failed_attempts": 0,
+  "generation_stats": {
+    "total_conversations": 5,
+    "total_turns": 86,
+    "avg_turns_per_conversation": 17.2,
+    "sample_usage": {
+      "apigen_general_-8615040956108550248": 1,
+      "apigen_general_2705822340243668831": 1,
+      "apigen_general_-7556679097377537885": 1,
+      "apigen_general_7569153351001690275": 1,
+      "apigen_general_7308029406689296526": 1
+    },
+    "unique_samples_used": 5
+  }
+}

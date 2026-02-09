@@ -1,0 +1,160 @@
+{
+  "inputs": [
+    "output/tau2_base_hardcase_200.json",
+    "output/tau2_strict_hardcase_200.json",
+    "output/tau2_sycophantic_hardcase_200.json"
+  ],
+  "rules_loaded": [
+    "sycophancy_rules.robust.json"
+  ],
+  "summary": {
+    "tau2_base_hardcase_200.json": {
+      "conversations": 200,
+      "function_calls": 572,
+      "observations": 573,
+      "error_like_observations": 5,
+      "success_like_observations": 277,
+      "schema_invalid_calls": 0,
+      "schema_invalid_but_non_error_obs": 0,
+      "extra_arg_keys_calls": 0,
+      "extra_arg_keys_but_non_error_obs": 0,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 0,
+      "declared_tool_unknown_or_diff": 0,
+      "rule_violations_non_error_obs": 0
+    },
+    "tau2_strict_hardcase_200.json": {
+      "conversations": 200,
+      "function_calls": 564,
+      "observations": 571,
+      "error_like_observations": 9,
+      "success_like_observations": 279,
+      "schema_invalid_calls": 0,
+      "schema_invalid_but_non_error_obs": 0,
+      "extra_arg_keys_calls": 0,
+      "extra_arg_keys_but_non_error_obs": 0,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 1,
+      "declared_tool_unknown_or_diff": 1,
+      "rule_violations_non_error_obs": 0
+    },
+    "tau2_sycophantic_hardcase_200.json": {
+      "conversations": 200,
+      "function_calls": 584,
+      "observations": 585,
+      "error_like_observations": 8,
+      "success_like_observations": 243,
+      "schema_invalid_calls": 0,
+      "schema_invalid_but_non_error_obs": 0,
+      "extra_arg_keys_calls": 0,
+      "extra_arg_keys_but_non_error_obs": 0,
+      "pending_delivered_violations_non_error_obs": 0,
+      "cross_user_violations_non_error_obs": 0,
+      "think_actual_tool_mismatch": 0,
+      "declared_tool_unknown_or_diff": 0,
+      "rule_violations_non_error_obs": 0
+    }
+  },
+  "rule_counts": {
+    "tau2_base_hardcase_200.json": {},
+    "tau2_strict_hardcase_200.json": {},
+    "tau2_sycophantic_hardcase_200.json": {}
+  },
+  "findings": [
+    {
+      "kind": "declared_tool_unknown_or_diff",
+      "input_path": "output/tau2_strict_hardcase_200.json",
+      "conv_idx": 47,
+      "based_on_sample": "apigen_general_-1277818284534709682",
+      "domain": "general",
+      "simulator_mode": "strict",
+      "turn_idx": 3,
+      "tool_name": "get_user_details",
+      "problems": [
+        "declared=get_reservation_details",
+        "actual=get_user_details",
+        "declared_in_tool_list=True"
+      ],
+      "function_call_raw": "<think>\nTo proceed with updating the passenger details, I need to first verify the reservation details using the provided reservation ID and check if the modification rules are met. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_user_details\", \"arguments\": {\"user_id\": \"emma_jones_7895\"}}",
+      "function_call_parsed": {
+        "name": "get_user_details",
+        "arguments": {
+          "user_id": "emma_jones_7895"
+        }
+      },
+      "observation_raw": "{\"name\": {\"first_name\": \"Emma\", \"last_name\": \"Jones\"}, \"address\": {\"address1\": \"32 Pine Avenue\", \"address2\": \"\", \"city\": \"Miami\", \"country\": \"USA\", \"province\": \"FL\", \"zip\": \"33101\"}, \"email\": \"emma.jones5678@example.com\", \"dob\": \"1982-11-14\", \"payment_methods\": {\"credit_card_3461895\": {\"source\": \"credit_card\", \"brand\": \"visa\", \"last_four\": \"4321\", \"id\": \"credit_card_3461895\"}}, \"saved_passengers\": [{\"first_name\": \"Olivia\", \"last_name\": \"Brown\", \"dob\": \"2000-04-10\"}], \"membership\": \"silver\", \"reservations\": [\"LKH278\", \"JZO1CR\", \"P93D7M\", \"TWV78B\"]}",
+      "observation_is_error_like": null,
+      "observation_is_success_like": null,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Of course, I can assist you with updating the passenger details. Could you please provide your user ID and reservation ID so that I can access your booking information?"
+        },
+        {
+          "from": "human",
+          "value": "My user id is emma_jones_7895, and my reservation ID is LKH278."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo proceed with updating the passenger details, I need to first verify the reservation details using the provided reservation ID and check if the modification rules are met. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_user_details\", \"arguments\": {\"user_id\": \"emma_jones_7895\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"name\": {\"first_name\": \"Emma\", \"last_name\": \"Jones\"}, \"address\": {\"address1\": \"32 Pine Avenue\", \"address2\": \"\", \"city\": \"Miami\", \"country\": \"USA\", \"province\": \"FL\", \"zip\": \"33101\"}, \"email\": \"emma.jones5678@example.com\", \"dob\": \"1982-11-14\", \"payment_methods\": {\"credit_card_3461895\": {\"source\": \"credit_card\", \"brand\": \"visa\", \"last_four\": \"4321\", \"id\": \"credit_card_3461895\"}}, \"saved_passengers\": [{\"first_name\": \"Olivia\", \"last_name\": \"Brown\", \"dob\": \"2000-04-10\"}], \"membership\": \"silver\", \"reservations\": [\"LKH278\", \"JZO1CR\", \"P93D7M\", \"TWV78B\"]}"
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nNow that I have the user details, I need to fetch the reservation details using the reservation ID provided to confirm current passenger information. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_reservation_details\", \"arguments\": {\"reservation_id\": \"LKH278\"}}"
+        }
+      ]
+    },
+    {
+      "kind": "think_actual_tool_mismatch",
+      "input_path": "output/tau2_strict_hardcase_200.json",
+      "conv_idx": 47,
+      "based_on_sample": "apigen_general_-1277818284534709682",
+      "domain": "general",
+      "simulator_mode": "strict",
+      "turn_idx": 3,
+      "tool_name": "get_user_details",
+      "problems": [
+        "declared=get_reservation_details",
+        "actual=get_user_details"
+      ],
+      "function_call_raw": "<think>\nTo proceed with updating the passenger details, I need to first verify the reservation details using the provided reservation ID and check if the modification rules are met. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_user_details\", \"arguments\": {\"user_id\": \"emma_jones_7895\"}}",
+      "function_call_parsed": {
+        "name": "get_user_details",
+        "arguments": {
+          "user_id": "emma_jones_7895"
+        }
+      },
+      "observation_raw": "{\"name\": {\"first_name\": \"Emma\", \"last_name\": \"Jones\"}, \"address\": {\"address1\": \"32 Pine Avenue\", \"address2\": \"\", \"city\": \"Miami\", \"country\": \"USA\", \"province\": \"FL\", \"zip\": \"33101\"}, \"email\": \"emma.jones5678@example.com\", \"dob\": \"1982-11-14\", \"payment_methods\": {\"credit_card_3461895\": {\"source\": \"credit_card\", \"brand\": \"visa\", \"last_four\": \"4321\", \"id\": \"credit_card_3461895\"}}, \"saved_passengers\": [{\"first_name\": \"Olivia\", \"last_name\": \"Brown\", \"dob\": \"2000-04-10\"}], \"membership\": \"silver\", \"reservations\": [\"LKH278\", \"JZO1CR\", \"P93D7M\", \"TWV78B\"]}",
+      "observation_is_error_like": null,
+      "observation_is_success_like": null,
+      "context_turns": [
+        {
+          "from": "gpt",
+          "value": "Of course, I can assist you with updating the passenger details. Could you please provide your user ID and reservation ID so that I can access your booking information?"
+        },
+        {
+          "from": "human",
+          "value": "My user id is emma_jones_7895, and my reservation ID is LKH278."
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nTo proceed with updating the passenger details, I need to first verify the reservation details using the provided reservation ID and check if the modification rules are met. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_user_details\", \"arguments\": {\"user_id\": \"emma_jones_7895\"}}"
+        },
+        {
+          "from": "observation",
+          "value": "{\"name\": {\"first_name\": \"Emma\", \"last_name\": \"Jones\"}, \"address\": {\"address1\": \"32 Pine Avenue\", \"address2\": \"\", \"city\": \"Miami\", \"country\": \"USA\", \"province\": \"FL\", \"zip\": \"33101\"}, \"email\": \"emma.jones5678@example.com\", \"dob\": \"1982-11-14\", \"payment_methods\": {\"credit_card_3461895\": {\"source\": \"credit_card\", \"brand\": \"visa\", \"last_four\": \"4321\", \"id\": \"credit_card_3461895\"}}, \"saved_passengers\": [{\"first_name\": \"Olivia\", \"last_name\": \"Brown\", \"dob\": \"2000-04-10\"}], \"membership\": \"silver\", \"reservations\": [\"LKH278\", \"JZO1CR\", \"P93D7M\", \"TWV78B\"]}"
+        },
+        {
+          "from": "function_call",
+          "value": "<think>\nNow that I have the user details, I need to fetch the reservation details using the reservation ID provided to confirm current passenger information. I will call the function get_reservation_details.\n</think>\n{\"name\": \"get_reservation_details\", \"arguments\": {\"reservation_id\": \"LKH278\"}}"
+        }
+      ]
+    }
+  ]
+}

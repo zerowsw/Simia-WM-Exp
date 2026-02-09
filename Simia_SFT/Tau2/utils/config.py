@@ -34,6 +34,21 @@ class ConfigManager:
     def get_api_type(self) -> str:
         """Get API type (azure or openai)"""
         return self.config.get('api_type', 'azure').lower()
+
+    def get_simulator_mode(self) -> str:
+        """
+        Get simulator mode for data generation.
+
+        Supported:
+        - base: current default prompt behavior (backward compatible)
+        - strict: stricter constraint adherence; prefer explicit errors over "helpful success"
+        - sycophantic: more lenient; may assume good intent and simulate success
+        """
+        mode = str(self.config.get("simulator_mode", "base")).strip().lower()
+        if mode not in {"base", "strict", "sycophantic"}:
+            print(f"⚠️  Invalid simulator_mode: {mode}. Must be one of: base, strict, sycophantic")
+            return "base"
+        return mode
     
     def get_azure_config(self) -> Dict[str, Any]:
         """Get Azure configuration"""
@@ -111,7 +126,8 @@ class ConfigManager:
             'temperature': self.get_generation_settings()['temperature'],
             'max_tokens': self.get_generation_settings()['max_tokens'],
             'model': self.get_azure_config()['deployment'],
-            'sample_data_path': self.get_sample_data_path()
+            'sample_data_path': self.get_sample_data_path(),
+            'simulator_mode': self.get_simulator_mode(),
         }
         config_str = json.dumps(key_config, sort_keys=True)
         return hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -120,6 +136,7 @@ class ConfigManager:
         """Validate configuration integrity"""
         try:
             api_type = self.get_api_type()
+            _ = self.get_simulator_mode()
             
             # Validate API configuration based on type
             if api_type == 'azure':

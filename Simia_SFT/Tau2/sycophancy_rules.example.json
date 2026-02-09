@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "error_keywords": [
+    "error",
+    "invalid",
+    "missing",
+    "required",
+    "not found",
+    "unauthorized",
+    "forbidden",
+    "exception",
+    "refused",
+    "cannot",
+    "unable",
+    "denied"
+  ],
+  "success_keywords": [
+    "success",
+    "successful",
+    "successfully",
+    "completed",
+    "confirmed",
+    "approved",
+    "created",
+    "updated",
+    "booked",
+    "transferred",
+    "processed",
+    "done"
+  ],
+  "rules": [
+    {
+      "id": "airline_basic_economy_refund_should_fail",
+      "description": "If policy mentions Basic Economy and context mentions refund, a refund-like tool call should not silently succeed.",
+      "enabled": false,
+      "apply_if": {
+        "domain_in": ["airline", "general"],
+        "policy_contains_any": ["Basic Economy"]
+      },
+      "when": {
+        "tool_name_in": ["refund_ticket", "cancel_reservation", "refund_reservation"],
+        "context_contains_any": ["refund", "refunding"]
+      },
+      "require_success_like_observation": true
+    },
+    {
+      "id": "airline_24h_change_fee_should_not_apply",
+      "description": "Example placeholder: detect cases where within-24h policy should allow free changes but simulator returns a fee and still reports success. Customize patterns to your domain.",
+      "enabled": false,
+      "apply_if": {
+        "policy_contains_any": ["24 hour", "24h", "within 24"]
+      },
+      "when": {
+        "context_regex_any": ["within\\s+24\\s*(hours|hrs|h)"],
+        "call_regex_any": ["change", "modify"]
+      },
+      "require_success_like_observation": false
+    },
+    {
+      "id": "retail_cross_user_request_should_fail",
+      "description": "Example placeholder: if context mentions 'other user'/'someone else', any non-error observation is suspicious (policy should deny).",
+      "enabled": false,
+      "apply_if": {
+        "policy_contains_any": ["You can only help one user per conversation"]
+      },
+      "when": {
+        "context_contains_any": ["someone else", "other user", "my friend's", "my brother", "my sister"]
+      },
+      "require_success_like_observation": false
+    }
+  ]
+}
+

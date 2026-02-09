@@ -377,7 +377,28 @@ class SimulatedGeneralEnv(BaseEnv):
         ref_conv_text = self._format_reference_conversations()
         history_text = self._format_history_for_prompt()
         
+        simulator_mode = str(getattr(self.config, "simulator_mode", "base")).strip().lower()
+        if simulator_mode not in {"base", "strict", "sycophantic"}:
+            simulator_mode = "base"
+
+        if simulator_mode == "strict":
+            mode_instructions = """Simulator mode: STRICT
+- Be strict and constraint-following. Do NOT "helpfully" fabricate success.
+- If the RL model's tool call is invalid, return an explicit error message (do not auto-correct arguments).
+- If the RL model requests an action that would violate stated rules/policies, respond with an error/denial.
+- When returning an error, briefly explain what constraint was violated and what needs to be fixed."""
+        elif simulator_mode == "sycophantic":
+            mode_instructions = """Simulator mode: SYCOPHANTIC (lenient)
+- Be helpful. If the RL model's intent is clear, you MAY ignore minor mistakes and simulate a successful outcome.
+- You MAY infer missing details or silently fix minor formatting/argument issues.
+- Prefer keeping the conversation moving, and avoid blocking on small errors unless unavoidable."""
+        else:
+            mode_instructions = """Simulator mode: BASE
+- Follow the existing requirements below without extra strictness or leniency."""
+
         prompt = f"""You are a simulation environment. Based on the RL model's response, you need to simulate the human or tool response.
+
+{mode_instructions}
 
 System prompt (task description and rules):
 {self.system_prompt}
@@ -417,7 +438,12 @@ Please directly generate the next message without the prefix "User/Tool response
         self._save_gpt_call_info(
             prompt=prompt,
             response=response,
-            metadata={"step": self.current_step, "type": "environment_response", "agent_message": agent_message}
+            metadata={
+                "step": self.current_step,
+                "type": "environment_response",
+                "agent_message": agent_message,
+                "simulator_mode": simulator_mode,
+            }
         )
         
         # Check if should terminate
@@ -433,6 +459,10 @@ Please directly generate the next message without the prefix "User/Tool response
         """
         history_text = self._format_history_for_prompt()
         
+        simulator_mode = str(getattr(self.config, "simulator_mode", "base")).strip().lower()
+        if simulator_mode not in {"base", "strict", "sycophantic"}:
+            simulator_mode = "base"
+
         prompt = f"""You need to evaluate the RL model's performance in this task and provide a reward.
 
 System prompt (rules and policies):
@@ -446,6 +476,8 @@ Evaluation criteria:
 2. Did the RL model follow the rules and procedures in the system prompt
 3. **Tool call format check**: If the RL model attempted to call tools, were they properly wrapped in <tool_call></tool_call> tags with correct JSON format? If tool calls were malformed or not properly tagged, this should be considered a FAILURE.
 4. Did the RL model handle tool responses correctly
+
+Note: The environment simulator is running in mode: {simulator_mode}
 
 **IMPORTANT**: 
 - Simply completing the user's request is NOT sufficient if policies were violated
@@ -465,7 +497,7 @@ Please perform the evaluation:"""
         self._save_gpt_call_info(
             prompt=prompt,
             response=response,
-            metadata={"step": self.current_step, "type": "final_evaluation"}
+            metadata={"step": self.current_step, "type": "final_evaluation", "simulator_mode": simulator_mode}
         )
         
         # Parse evaluation result
@@ -642,6 +674,7 @@ Please perform the evaluation:"""
                     "temperature": self.config.temperature,
                     "max_tokens": self.config.max_tokens,
                     "azure_endpoint": self.config.azure_endpoint,
+                    "simulator_mode": str(getattr(self.config, "simulator_mode", "base")).strip().lower(),
                 }
             }
             

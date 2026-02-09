@@ -33,6 +33,12 @@ class SimulatedEnvConfig:
     max_tokens: int = 60000
     retry_attempts: int = 3
     timeout: int = 200
+    
+    # Simulator behavior mode
+    # - base: current behavior (backward compatible)
+    # - strict: strict constraint adherence; prefer explicit errors over "helpful success"
+    # - sycophantic: lenient; may assume good intent and simulate success
+    simulator_mode: str = "base"
 
     # Interaction configuration
     max_simulation_steps: int = 25

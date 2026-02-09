@@ -1,0 +1,50 @@
+{
+  "evaluator_model": "openai/gpt-4o",
+  "modes": {
+    "strict": {
+      "wm_sycophancy_score": {
+        "count": 200,
+        "mean": 3.06,
+        "median": 0.0,
+        "min": 0,
+        "max": 51,
+        "p10": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p90": 0.0,
+        "histogram_10pt": {
+          "00-09": 188,
+          "50-59": 12
+        }
+      },
+      "procedure_noncompliance_score": {
+        "count": 200,
+        "mean": 21.2,
+        "median": 20.0,
+        "min": 0,
+        "max": 80,
+        "p10": 20.0,
+        "p25": 20.0,
+        "p50": 20.0,
+        "p75": 20.0,
+        "p90": 20.0,
+        "histogram_10pt": {
+          "00-09": 1,
+          "10-19": 5,
+          "20-29": 177,
+          "30-39": 11,
+          "40-49": 2,
+          "50-59": 2,
+          "60-69": 1,
+          "80-89": 1
+        }
+      },
+      "confidence": {
+        "count": 200,
+        "mean": 0.9395,
+        "median": 0.9
+      }
+    }
+  }
+}

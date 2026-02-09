@@ -1,0 +1,32 @@
+{
+  "simulator_mode": "strict",
+  "api_type": "openai",
+  "azure_endpoint": "<your_azure_endpoint>",
+  "api_version": "2025-04-01-preview",
+  "deployment": "gpt-5",
+  "openai_api_key": "",
+  "openai_base_url": "https://openrouter.ai/api/v1",
+  "openai_model": "openai/gpt-4o",
+  "output_settings": {
+    "output_dir": "output",
+    "output_file": "tau2_strict_error_80.json",
+    "save_intermediate": true,
+    "backup_existing": true
+  },
+  "sample_data_path": "APIGen_error_samples.json",
+  "gpt_log_settings": {
+    "enable_logging": true,
+    "log_file": "gpt_log_strict_error_{timestamp}.jsonl"
+  },
+  "generation_settings": {
+    "max_conversations": 80,
+    "temperature": 1,
+    "max_tokens": 60000,
+    "retry_attempts": 1,
+    "parallel_workers": 5,
+    "batch_size": 10,
+    "rate_limit_delay": 1,
+    "save_progress": true
+  },
+  "timeout": 500
+}
