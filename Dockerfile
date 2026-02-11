@@ -129,8 +129,9 @@ RUN pip install --no-cache-dir --ignore-installed azureml-mlflow mlflow
 # Install specific versions of ray (opentelemetry will be installed as dependency)
 RUN pip install --no-cache-dir "ray[default]==2.49.1"
 
-# Install LLaMA Factory for SFT training
-RUN pip install --no-cache-dir llamafactory
+# Install LLaMA Factory for SFT training (neat_packing incompatible with transformers>=4.53.0)
+RUN pip install --no-cache-dir llamafactory && \
+    pip install --no-cache-dir "transformers>=4.40,<4.53"
 
 # Install OpenAI SDK for API interactions
 RUN pip install --no-cache-dir openai
