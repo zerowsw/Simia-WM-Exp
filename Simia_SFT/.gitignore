@@ -28,5 +28,9 @@ wandb/
 !Tau2/output/
 !Tau2/output/**
 
+# Ignore generated pipeline output and SFT workdir
+Tau2/output/tau2_base_hardcase_200_processed.json
+sft_training/workdir/
+
 # Large raw seed JSON (use the provided zip instead)
 APIGen_5k_preprocessed.json

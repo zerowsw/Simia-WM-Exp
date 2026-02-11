@@ -141,11 +141,12 @@ for i in "${!SCRIPTS[@]}"; do
             python3 "$SCRIPT" --input "$CURRENT_INPUT" --output "$CURRENT_OUTPUT"
             ;;
         "tool_correct.py")
-            if [ -f "$CONFIG_FILE" ]; then
-                python3 "$SCRIPT" "$CURRENT_INPUT" "$CURRENT_OUTPUT" "$CONFIG_FILE"
-            else
-                python3 "$SCRIPT" "$CURRENT_INPUT" "$CURRENT_OUTPUT"
+            TOOLS_SPEC="${CONFIG_FILE:-$SCRIPT_DIR/tools_seed.json}"
+            if [ ! -f "$TOOLS_SPEC" ]; then
+                log_error "Tools spec not found: $TOOLS_SPEC"
+                exit 1
             fi
+            python3 "$SCRIPT" "$CURRENT_INPUT" "$CURRENT_OUTPUT" "$TOOLS_SPEC"
             ;;
         "remove_think_tag.py")
             python3 "$SCRIPT" "$CURRENT_INPUT" "$CURRENT_OUTPUT"
