@@ -33,12 +33,20 @@ bash Simia_SFT/sft_training/run_sft.sh data.json \
     --batch-size 2
 ```
 
-### Multi-GPU with DeepSpeed ZeRO-3
+### Multi-GPU with DeepSpeed (required for A100-40GB)
+
+For 8x A100-40GB, full fine-tuning of a 7B model requires DeepSpeed ZeRO-3 with CPU offloading to fit in memory:
 
 ```bash
-bash Simia_SFT/sft_training/run_sft.sh data.json \
-    --skip-process \
-    --deepspeed Simia_SFT/sft_training/ds_z3_config.json
+bash Simia_SFT/sft_training/run_sft.sh Simia_SFT/Tau2/output/tau2_base_hardcase_200.json \
+    --deepspeed Simia_SFT/sft_training/ds_zero3.json
+```
+
+ZeRO-2 (no CPU offloading, faster but needs more VRAM — suitable for A100-80GB):
+
+```bash
+bash Simia_SFT/sft_training/run_sft.sh Simia_SFT/Tau2/output/tau2_base_hardcase_200.json \
+    --deepspeed Simia_SFT/sft_training/ds_zero2.json
 ```
 
 ### Use a Custom LLaMA Factory Config
@@ -84,7 +92,8 @@ The `run_sft.sh` script runs three steps:
 | `run_sft.sh` | Main entry point - end-to-end pipeline script |
 | `prepare_sft_data.py` | Validates data and writes `dataset_info.json` |
 | `sft_config.yaml` | Reference LLaMA Factory training config |
-| `ds_z3_config.json` | DeepSpeed ZeRO-3 config for multi-GPU training |
+| `ds_zero2.json` | DeepSpeed ZeRO-2 config (A100-80GB) |
+| `ds_zero3.json` | DeepSpeed ZeRO-3 config with CPU offloading (A100-40GB) |
 
 ## Data Format
 

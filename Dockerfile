@@ -133,8 +133,17 @@ RUN pip install --no-cache-dir "ray[default]==2.49.1"
 RUN pip install --no-cache-dir llamafactory && \
     pip install --no-cache-dir "transformers>=4.40,<4.53"
 
+# Install DeepSpeed for memory-efficient distributed training (ZeRO)
+RUN pip install --no-cache-dir "deepspeed>=0.10.0,<=0.16.9"
+
 # Install OpenAI SDK for API interactions
 RUN pip install --no-cache-dir openai
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code || \
+    (curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+     apt-get install -y nodejs && \
+     npm install -g @anthropic-ai/claude-code)
 
 # Re-pin numpy (later installs like mlflow/ray/llamafactory can upgrade it)
 RUN pip install --no-cache-dir "numpy<2.3"

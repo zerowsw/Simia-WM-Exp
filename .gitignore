@@ -1,0 +1,9 @@
+# Training outputs (model checkpoints, logs)
+Simia_SFT/sft_training/saves/
+Simia_SFT/sft_training/workdir/
+
+# MLflow
+mlruns/
+
+# Accidental files
+your
