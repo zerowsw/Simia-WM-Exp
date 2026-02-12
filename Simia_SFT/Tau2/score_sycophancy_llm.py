@@ -136,6 +136,48 @@ def _openai_client(api_key: str, base_url: str):
 
 
 # ---------------------------
+# Bedrock client
+# ---------------------------
+
+def _create_bedrock_client(region: str):
+    import boto3  # type: ignore
+    return boto3.client("bedrock-runtime", region_name=region)
+
+
+def _score_one_bedrock(
+    bedrock_client,
+    model_id: str,
+    conv_payload_json: str,
+    *,
+    max_retries: int = 3,
+    sleep_base: float = 1.0,
+) -> Dict[str, Any]:
+    """Call Bedrock Converse API as evaluator and return parsed JSON."""
+    last_err: Optional[str] = None
+    for attempt in range(max_retries):
+        try:
+            resp = bedrock_client.converse(
+                modelId=model_id,
+                system=[{"text": EVALUATOR_SYSTEM_PROMPT + "\n\nIMPORTANT: Output MUST be valid JSON and nothing else. No markdown fences."}],
+                messages=[
+                    {"role": "user", "content": [{"text": conv_payload_json}]},
+                ],
+                inferenceConfig={"temperature": 0, "maxTokens": 8192},
+            )
+            content = resp["output"]["message"]["content"][0]["text"]
+            obj = _parse_json_object(content)
+            if not obj:
+                raise ValueError(f"Evaluator returned non-JSON content: {content[:200]}")
+            return obj
+        except Exception as e:
+            last_err = str(e)
+            sleep_s = sleep_base * (2 ** attempt) + random.random() * 0.25
+            time.sleep(sleep_s)
+            continue
+    raise RuntimeError(f"Failed after retries: {last_err}")
+
+
+# ---------------------------
 # IO helpers
 # ---------------------------
 
@@ -315,6 +357,9 @@ def main() -> int:
     parser.add_argument("--config", default="config.json", help="Config file for API key/base/model fallback.")
     parser.add_argument("--model", default="", help="Override evaluator model (OpenRouter model string).")
     parser.add_argument("--output-dir", default="output")
+    parser.add_argument("--api-type", choices=["openrouter", "bedrock"], default="openrouter", help="API backend.")
+    parser.add_argument("--bedrock-region", default="us-east-1", help="AWS region for Bedrock.")
+    parser.add_argument("--bedrock-model", default="us.anthropic.claude-sonnet-4-20250514-v1:0", help="Bedrock model ID.")
     parser.add_argument("--limit", type=int, default=0, help="If >0, only score first N per mode (debug).")
     parser.add_argument(
         "--mode",
@@ -333,13 +378,22 @@ def main() -> int:
     output_dir = tau2_dir / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    fallback_cfg = tau2_dir / args.config
-    api_cfg = _load_openrouter_config(fallback_cfg)
-    model = args.model or api_cfg["model"]
+    use_bedrock = args.api_type == "bedrock"
 
     client = None
-    if not args.summarize_only:
-        client = _openai_client(api_cfg["api_key"], api_cfg["base_url"])
+    bedrock_client = None
+    model = ""
+
+    if use_bedrock:
+        model = args.bedrock_model
+        if not args.summarize_only:
+            bedrock_client = _create_bedrock_client(args.bedrock_region)
+    else:
+        fallback_cfg = tau2_dir / args.config
+        api_cfg = _load_openrouter_config(fallback_cfg)
+        model = args.model or api_cfg["model"]
+        if not args.summarize_only:
+            client = _openai_client(api_cfg["api_key"], api_cfg["base_url"])
 
     mode_paths = {
         "base": tau2_dir / args.base,
@@ -375,7 +429,6 @@ def main() -> int:
         limit = args.limit if args.limit and args.limit > 0 else total
 
         if not args.summarize_only:
-            assert client is not None
             for conv_idx, conv in enumerate(data[:limit]):
                 if conv_idx in already:
                     continue
@@ -383,7 +436,12 @@ def main() -> int:
                 payload = _build_user_payload(conv if isinstance(conv, dict) else {})
 
                 try:
-                    scored = _score_one(client, model, payload)
+                    if use_bedrock:
+                        assert bedrock_client is not None
+                        scored = _score_one_bedrock(bedrock_client, model, payload)
+                    else:
+                        assert client is not None
+                        scored = _score_one(client, model, payload)
                 except Exception as e:
                     # Write a failure record for debugging/resume
                     rec = {

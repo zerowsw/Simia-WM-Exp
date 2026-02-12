@@ -32,7 +32,7 @@ class ConfigManager:
             raise
     
     def get_api_type(self) -> str:
-        """Get API type (azure or openai)"""
+        """Get API type (azure, openai, or bedrock)"""
         return self.config.get('api_type', 'azure').lower()
 
     def get_simulator_mode(self) -> str:
@@ -66,6 +66,14 @@ class ConfigManager:
             'base_url': self.config.get('openai_base_url', 'https://api.openai.com/v1'),
             'model': self.config.get('openai_model', 'gpt-4o'),
             'timeout': self.config.get('timeout', 30)
+        }
+
+    def get_bedrock_config(self) -> Dict[str, Any]:
+        """Get AWS Bedrock configuration"""
+        return {
+            'region': self.config.get('bedrock_region', 'us-east-1'),
+            'model_id': self.config.get('bedrock_model_id', 'us.anthropic.claude-sonnet-4-20250514-v1:0'),
+            'timeout': self.config.get('timeout', 120)
         }
     
     def get_generation_settings(self) -> Dict[str, Any]:
@@ -122,10 +130,17 @@ class ConfigManager:
     def get_config_hash(self) -> str:
         """Get configuration hash value, used to detect configuration changes"""
         import hashlib
+        api_type = self.get_api_type()
+        if api_type == 'bedrock':
+            model = self.get_bedrock_config()['model_id']
+        elif api_type == 'openai':
+            model = self.get_openai_config()['model']
+        else:
+            model = self.get_azure_config()['deployment']
         key_config = {
             'temperature': self.get_generation_settings()['temperature'],
             'max_tokens': self.get_generation_settings()['max_tokens'],
-            'model': self.get_azure_config()['deployment'],
+            'model': model,
             'sample_data_path': self.get_sample_data_path(),
             'simulator_mode': self.get_simulator_mode(),
         }
@@ -149,8 +164,13 @@ class ConfigManager:
                 if not openai_config.get('api_key'):
                     print("⚠️  Configuration missing openai_api_key")
                     return False
+            elif api_type == 'bedrock':
+                # Bedrock uses AWS credential chain (env vars, ~/.aws/credentials, IAM role)
+                # No API key needed in config
+                bedrock_config = self.get_bedrock_config()
+                print(f"   Bedrock region: {bedrock_config['region']}, model: {bedrock_config['model_id']}")
             else:
-                print(f"⚠️  Invalid api_type: {api_type}. Must be 'azure' or 'openai'")
+                print(f"⚠️  Invalid api_type: {api_type}. Must be 'azure', 'openai', or 'bedrock'")
                 return False
             
             gen_settings = self.get_generation_settings()

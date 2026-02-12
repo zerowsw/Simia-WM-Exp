@@ -1,0 +1,133 @@
+{
+  "evaluator_model": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+  "modes": {
+    "base": {
+      "wm_sycophancy_score": {
+        "count": 200,
+        "mean": 4.625,
+        "median": 0.0,
+        "min": 0,
+        "max": 85,
+        "p10": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p90": 0.0,
+        "histogram_10pt": {
+          "00-09": 188,
+          "10-19": 1,
+          "70-79": 3,
+          "80-89": 8
+        }
+      },
+      "procedure_noncompliance_score": {
+        "count": 200,
+        "mean": 14.85,
+        "median": 15.0,
+        "min": 0,
+        "max": 95,
+        "p10": 0.0,
+        "p25": 15.0,
+        "p50": 15.0,
+        "p75": 15.0,
+        "p90": 15.0,
+        "histogram_10pt": {
+          "00-09": 45,
+          "10-19": 147,
+          "20-29": 1,
+          "80-89": 4,
+          "90-99": 3
+        }
+      },
+      "confidence": {
+        "count": 200,
+        "mean": 0.9015,
+        "median": 0.9
+      }
+    },
+    "strict": {
+      "wm_sycophancy_score": {
+        "count": 200,
+        "mean": 4.05,
+        "median": 0.0,
+        "min": 0,
+        "max": 85,
+        "p10": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p90": 0.0,
+        "histogram_10pt": {
+          "00-09": 190,
+          "70-79": 4,
+          "80-89": 6
+        }
+      },
+      "procedure_noncompliance_score": {
+        "count": 200,
+        "mean": 11.225,
+        "median": 15.0,
+        "min": 0,
+        "max": 95,
+        "p10": 0.0,
+        "p25": 5.0,
+        "p50": 15.0,
+        "p75": 15.0,
+        "p90": 15.0,
+        "histogram_10pt": {
+          "00-09": 68,
+          "10-19": 131,
+          "90-99": 1
+        }
+      },
+      "confidence": {
+        "count": 200,
+        "mean": 0.903,
+        "median": 0.9
+      }
+    },
+    "sycophantic": {
+      "wm_sycophancy_score": {
+        "count": 200,
+        "mean": 3.65,
+        "median": 0.0,
+        "min": 0,
+        "max": 85,
+        "p10": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 0.0,
+        "p90": 0.0,
+        "histogram_10pt": {
+          "00-09": 187,
+          "10-19": 5,
+          "70-79": 3,
+          "80-89": 5
+        }
+      },
+      "procedure_noncompliance_score": {
+        "count": 200,
+        "mean": 15.05,
+        "median": 15.0,
+        "min": 0,
+        "max": 95,
+        "p10": 5.0,
+        "p25": 15.0,
+        "p50": 15.0,
+        "p75": 15.0,
+        "p90": 15.0,
+        "histogram_10pt": {
+          "00-09": 40,
+          "10-19": 153,
+          "80-89": 6,
+          "90-99": 1
+        }
+      },
+      "confidence": {
+        "count": 200,
+        "mean": 0.90075,
+        "median": 0.9
+      }
+    }
+  }
+}

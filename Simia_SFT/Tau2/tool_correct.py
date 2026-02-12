@@ -21,9 +21,11 @@ class MultiDomainToolUseValidator:
         
         self.retail_config = self.tools_spec.get("tools_config_2", {})
         self.airline_config = self.tools_spec.get("tools_config_3", {})
-        
+        self.telecom_config = self.tools_spec.get("tools_config_1", {})
+
         self.retail_tools = self._build_tools_dict(self.retail_config)
         self.airline_tools = self._build_tools_dict(self.airline_config)
+        self.telecom_tools = self._build_tools_dict(self.telecom_config)
         
         self.discarded_conversations = 0
         
@@ -66,6 +68,18 @@ class MultiDomainToolUseValidator:
             if msg.get("from") == "system":
                 system_content = msg.get("value", "").lower()
                 if "airline" in system_content:
+                    return True
+        return False
+
+    def _is_telecom_domain(self, conversation: Dict) -> bool:
+        """Check if conversation is from telecom domain"""
+        system_content = conversation.get("system", "").lower()
+        if "telecom" in system_content:
+            return True
+        for msg in conversation.get("conversations", []):
+            if msg.get("from") == "system":
+                system_content = msg.get("value", "").lower()
+                if "telecom" in system_content:
                     return True
         return False
         
@@ -119,12 +133,16 @@ class MultiDomainToolUseValidator:
             
         is_retail = self._is_retail_domain(conversation)
         is_airline = self._is_airline_domain(conversation)
-        
+        is_telecom = self._is_telecom_domain(conversation)
+
         if is_retail:
             result = self._validate_with_tools(conversation, self.retail_tools, "retail")
             return result
         elif is_airline:
             result = self._validate_with_tools(conversation, self.airline_tools, "airline")
+            return result
+        elif is_telecom:
+            result = self._validate_with_tools(conversation, self.telecom_tools, "telecom")
             return result
         else:
             return conversation
@@ -291,21 +309,61 @@ class MultiDomainToolUseValidator:
                     fixed_value = self._fix_parameter_format_retail(param_name, param_value, func_name)
                     if not self._validate_parameter_format_retail(param_name, fixed_value, func_name):
                         return None
+                elif domain == "telecom":
+                    fixed_value = self._fix_parameter_format_telecom(param_name, param_value, func_name)
+                    if not self._validate_parameter_format_telecom(param_name, fixed_value, func_name):
+                        return None
                 else:
                     fixed_value = param_value
-                    
+
                 fixed_arguments[param_name] = fixed_value
-                    
+
             return {
                 "function": {
                     "name": func_name,
                     "arguments": fixed_arguments
                 }
             }
-            
+
         except Exception:
             return None
-            
+
+    def _fix_parameter_format_telecom(self, param_name: str, param_value: Any, func_name: str) -> Any:
+        """Fix telecom domain parameter format"""
+        if not isinstance(param_value, str):
+            return param_value
+
+        # Ensure customer_id starts with "C"
+        if param_name == "customer_id":
+            if re.match(r'^\d+$', param_value):
+                return f"C{param_value}"
+
+        # Ensure line_id starts with "L"
+        if param_name == "line_id":
+            if re.match(r'^\d+$', param_value):
+                return f"L{param_value}"
+
+        # Ensure bill_id starts with "B"
+        if param_name == "bill_id":
+            if re.match(r'^\d+$', param_value):
+                return f"B{param_value}"
+
+        return param_value
+
+    def _validate_parameter_format_telecom(self, param_name: str, param_value: Any, func_name: str) -> bool:
+        """Validate telecom domain parameter format"""
+        if not isinstance(param_value, str):
+            return True
+
+        if param_name == "customer_id":
+            return bool(re.match(r'^C\d+$', param_value))
+        elif param_name == "line_id":
+            return bool(re.match(r'^L\d+$', param_value))
+        elif param_name == "bill_id":
+            return bool(re.match(r'^B\d+$', param_value))
+
+        return True
+
     def _fix_parameter_format_retail(self, param_name: str, param_value: Any, func_name: str) -> Any:
         """Fix retail domain parameter format"""
         if not isinstance(param_value, str):
@@ -401,6 +459,8 @@ class ToolUseValidator:
             self.tools_config = self.tools_spec.get("tools_config_2", {})
         elif domain == "airline":
             self.tools_config = self.tools_spec.get("tools_config_3", {})
+        elif domain == "telecom":
+            self.tools_config = self.tools_spec.get("tools_config_1", {})
         else:
             raise ValueError(f"Unsupported domain: {domain}")
             
@@ -480,12 +540,12 @@ class ToolUseValidator:
         """Try to fix parameter format"""
         if not isinstance(param_value, str):
             return param_value
-            
+
         if self.domain == "retail":
             if param_name == "order_id":
                 if not param_value.startswith("#"):
                     return f"#{param_value}"
-                    
+
             if param_name == "payment_method_id":
                 if param_value.startswith("paypal_"):
                     return param_value
@@ -510,24 +570,39 @@ class ToolUseValidator:
                 elif param_value.startswith("creditcard_"):
                     card_id = param_value.split("_", 1)[-1]
                     return f"credit_card_{card_id}"
-                
+
+        elif self.domain == "telecom":
+            if param_name == "customer_id" and re.match(r'^\d+$', param_value):
+                return f"C{param_value}"
+            if param_name == "line_id" and re.match(r'^\d+$', param_value):
+                return f"L{param_value}"
+            if param_name == "bill_id" and re.match(r'^\d+$', param_value):
+                return f"B{param_value}"
+
         return param_value
         
     def _validate_parameter_format(self, param_name: str, param_value: Any, func_name: str) -> bool:
         """Validate parameter format (after fixing)"""
         if not isinstance(param_value, str):
             return True
-            
+
         if self.domain == "retail":
             if param_name == "order_id":
                 return param_value.startswith("#")
             if param_name == "email":
                 return "@" in param_value
             if param_name == "payment_method_id":
-                return (param_value.startswith("gift_card_") or 
+                return (param_value.startswith("gift_card_") or
                        param_value.startswith("credit_card_") or
                        param_value.startswith("paypal_"))
-                
+        elif self.domain == "telecom":
+            if param_name == "customer_id":
+                return bool(re.match(r'^C\d+$', param_value))
+            if param_name == "line_id":
+                return bool(re.match(r'^L\d+$', param_value))
+            if param_name == "bill_id":
+                return bool(re.match(r'^B\d+$', param_value))
+
         return True
         
     def _validate_parameter_type(self, value: Any, expected_type: str, param_spec: Dict) -> bool:
@@ -593,25 +668,25 @@ class ToolUseValidator:
                 if not self._validate_parameter_type(param_value, expected_type, param_spec):
                     return None
                     
-                if self.domain == "retail":
+                if self.domain in ("retail", "telecom"):
                     fixed_value = self._fix_parameter_format(param_name, param_value, func_name)
                     if not self._validate_parameter_format(param_name, fixed_value, func_name):
                         return None
                 else:
                     fixed_value = param_value
-                    
+
                 fixed_arguments[param_name] = fixed_value
-                    
+
             return {
                 "function": {
                     "name": func_name,
                     "arguments": fixed_arguments
                 }
             }
-            
+
         except Exception:
             return None
-            
+
     def _fix_message_tool_calls(self, message: Dict) -> Optional[Dict]:
         """Fix tool calls in message"""
         if message.get("from") == "function_call":

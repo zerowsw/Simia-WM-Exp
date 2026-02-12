@@ -46,8 +46,24 @@ class ConversationGenerator:
                 base_url=api_config.get('base_url', 'https://api.openai.com/v1')
             )
             self.model = api_config.get('model', 'gpt-4o')
+        elif self.api_type == 'bedrock':
+            import boto3
+            from botocore.config import Config as BotoConfig
+            bedrock_timeout = api_config.get('timeout', 120)
+            boto_config = BotoConfig(
+                read_timeout=max(bedrock_timeout, 300),
+                connect_timeout=60,
+                retries={'max_attempts': 3, 'mode': 'adaptive'}
+            )
+            self.bedrock_client = boto3.client(
+                'bedrock-runtime',
+                region_name=api_config.get('region', 'us-east-1'),
+                config=boto_config,
+            )
+            self.model = api_config.get('model_id', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
+            self.client = None  # Not used for Bedrock
         else:
-            raise ValueError(f"Invalid api_type: {self.api_type}. Must be 'azure' or 'openai'")
+            raise ValueError(f"Invalid api_type: {self.api_type}. Must be 'azure', 'openai', or 'bedrock'")
         
         self.temperature = generation_settings.get('temperature', 1)
         self.max_tokens = generation_settings.get('max_tokens', 1000)
@@ -57,6 +73,86 @@ class ConversationGenerator:
         
 
     
+    def _call_bedrock(self, call_params: Dict[str, Any]) -> str:
+        """Call AWS Bedrock using the Converse API with iterative continuation for short responses."""
+        import json as _json
+        messages = call_params.get("messages", [])
+        bedrock_messages = []
+        system_parts = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append({"text": msg["content"]})
+            else:
+                bedrock_messages.append({
+                    "role": msg["role"],
+                    "content": [{"text": msg["content"]}]
+                })
+
+        inference_config = {
+            "temperature": call_params.get("temperature", self.temperature),
+        }
+        max_tokens = call_params.get("max_completion_tokens") or call_params.get("max_tokens", self.max_tokens)
+        if max_tokens:
+            inference_config["maxTokens"] = min(max_tokens, 16384)
+
+        converse_kwargs = {
+            "modelId": self.model,
+            "messages": bedrock_messages,
+            "inferenceConfig": inference_config,
+        }
+        if system_parts:
+            converse_kwargs["system"] = system_parts
+
+        # Iterative continuation: if Claude stops early, feed back its output
+        # and ask it to continue, up to max_continuations rounds
+        full_text = ""
+        max_continuations = 4
+
+        for iteration in range(max_continuations + 1):
+            response = self.bedrock_client.converse(**converse_kwargs)
+
+            output = response.get("output", {})
+            message = output.get("message", {})
+            content_blocks = message.get("content", [])
+            chunk = ""
+            for block in content_blocks:
+                if "text" in block:
+                    chunk += block["text"]
+
+            full_text += chunk
+            stop_reason = response.get("stopReason", "unknown")
+            output_tokens = response.get("usage", {}).get("outputTokens", 0)
+
+            # Check if conversation looks complete (has resolution indicators)
+            has_resolution = any(kw in full_text.lower() for kw in [
+                "is there anything else",
+                "anything else i can help",
+                "glad i could help",
+                "have a great day",
+                "goodbye",
+                "issue has been resolved",
+                "transferred to a human",
+                "please hold on",
+            ])
+
+            # Count turns to see if we have enough
+            lines = full_text.split('\n')
+            total_turns = sum(1 for l in lines if any(
+                l.strip().startswith(p) for p in ['HUMAN:', 'H:', 'ASSISTANT:', 'A:', 'FUNCTION_CALL:', 'OBSERVATION:']
+            ))
+
+            if has_resolution or total_turns >= 10 or stop_reason == "max_tokens":
+                break
+
+            if iteration < max_continuations:
+                # Feed back the partial response and ask to continue
+                converse_kwargs["messages"] = bedrock_messages + [
+                    {"role": "assistant", "content": [{"text": full_text}]},
+                    {"role": "user", "content": [{"text": "Continue generating the conversation. The issue is not yet resolved. Keep generating HUMAN:, A:, FUNCTION_CALL:, and OBSERVATION: turns until the customer's issue is fully resolved."}]},
+                ]
+
+        return full_text
+
     def _get_tools_from_sample(self, sample: Dict[str, Any]) -> str:
         """Get tools configuration from sample"""
         tools_json = sample.get('tools', '[]')
@@ -143,14 +239,26 @@ class ConversationGenerator:
         start_time = time.time()
         try:
             # Prepare API call parameters
-            call_params = {
-                "model": self.model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": self.temperature,
-                "timeout": self.timeout
-            }
+            if self.api_type == 'bedrock':
+                # For Bedrock/Claude: put all instructions in the user message
+                # and use assistant prefill to start generating the full conversation.
+                call_params = {
+                    "model": self.model,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": self.temperature,
+                    "timeout": self.timeout
+                }
+            else:
+                call_params = {
+                    "model": self.model,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": self.temperature,
+                    "timeout": self.timeout
+                }
             
             # Use max_completion_tokens for:
             # 1. Azure API (all models)
@@ -168,23 +276,25 @@ class ConversationGenerator:
             else:
                 call_params["max_tokens"] = self.max_tokens
             
-            response = self.client.chat.completions.create(**call_params)
-            
-            duration = time.time() - start_time
-            response_content = response.choices[0].message.content
-            
+            if self.api_type == 'bedrock':
+                response_content = self._call_bedrock(call_params)
+                duration = time.time() - start_time
+                tokens_used = {}  # Bedrock usage tracked separately via AWS billing
+            else:
+                response = self.client.chat.completions.create(**call_params)
+                duration = time.time() - start_time
+                response_content = response.choices[0].message.content
+
+                tokens_used = {}
+                if hasattr(response, 'usage') and response.usage:
+                    tokens_used = {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens
+                    }
 
             if response_content is None:
                 response_content = ""
-            
-
-            tokens_used = {}
-            if hasattr(response, 'usage') and response.usage:
-                tokens_used = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
-                }
             
 
             self.gpt_logger.log_gpt_call(
@@ -237,6 +347,7 @@ class ConversationGenerator:
     def build_agent_trajectory_generation_prompt(self, sample_question: str, sample_text: str, available_tools: str = "") -> str:
         is_retail_sample = "Retail" in sample_text or "retail" in sample_text.lower()
         is_airline_sample = "airline" in sample_text.lower()
+        is_telecom_sample = "telecom" in sample_text.lower()
         
         # Build mode-specific instructions (only injected for strict/sycophantic)
         if self.simulator_mode == "strict":
@@ -380,6 +491,79 @@ CRITICAL FORMAT PRESERVATION REQUIREMENTS - ABSOLUTE COMPLIANCE:
 - DO NOT invent or create new tools - use ONLY the provided tools
 - DO NOT attempt cancellations/refunds beyond 24 hours or for Basic Economy
 - DO NOT skip policy validation steps or tool call sequences
+
+## Requirements:
+1. Generate a completely NEW scenario/task that is different from the example but requires similar problem-solving patterns
+2. Create a multi-turn conversation between Human and Assistant that demonstrates systematic problem-solving
+3. The conversation should show the agent's reasoning process and step-by-step approach
+4. **Start directly with a HUMAN message - do not include the SYSTEM content**
+5. **CRITICAL: Ensure the generated conversation has approximately the same number of turns as the example trajectory**
+
+## Agent Behavior Guidelines:
+- Think step by step and explain reasoning
+- Use ONLY the tools listed in the "Available Tools" section above - no exceptions
+- Provide clear and helpful responses
+- Maintain conversation flow and context
+- Generate a conversation with comparable depth and turn count to the example
+- Strictly adhere to the provided tool constraints without deviation
+
+## Output Format:
+Generate the conversation:
+HUMAN: [user message content]
+ASSISTANT: [assistant reply content]
+HUMAN: [user message content]
+ASSISTANT: [assistant reply content]
+HUMAN: [user message content]
+ASSISTANT: [assistant reply content]
+...(until the task is finished and the conversation is complete)
+"""
+        elif is_telecom_sample:
+            prompt = f"""You are an AI assistant that generates multi-turn conversation data for agent training. Your task is to create new agent trajectories based on existing examples.
+{mode_block}
+## Example Trajectory:
+{sample_text}
+
+## Available Tools:
+{available_tools}
+
+CRITICAL FORMAT PRESERVATION REQUIREMENTS - ABSOLUTE COMPLIANCE:
+1. **STRICTLY PRESERVE ORIGINAL FORMAT**: You MUST maintain the EXACT format structure from the example trajectory (EXCEPTION: function_call turns may include <think> tags when reasoning is needed)
+2. **NO SYSTEM PROMPT GENERATION**: Do NOT generate any SYSTEM messages - follow the system prompt from the original example and that will be preserved separately
+3. **TOOL CONSTRAINT ADHERENCE**: You MUST STRICTLY use ONLY the tools listed in the "Available Tools" section above. DO NOT use any tools outside this specified allowed tool set. This is MANDATORY.
+4. **FORMAT CONSISTENCY**: Maintain identical conversation structure, role naming conventions, and response patterns as shown in the example (EXCEPTION: function_call turns may include <think> tags when reasoning is added)
+5. **TURN COUNT MATCHING**: Generate approximately the SAME NUMBER of conversation turns as the example trajectory - the generated conversation should have a comparable length and depth to the sample data
+
+## TELECOM COMPLIANCE RULES:
+1. **CUSTOMER IDENTITY VERIFICATION**: ALWAYS verify customer identity (via phone number, customer ID, or name+DOB) before any write operation (suspend, resume, refuel, enable/disable roaming, send payment request)
+2. **LINE STATUS GATING**: Line must be Active for suspension; Suspended or Pending Activation for resumption. Do NOT suspend an already-suspended line or resume an already-active line.
+3. **BILL PAYMENT CONSTRAINTS**: Only ONE bill in AWAITING_PAYMENT per customer at a time. ALWAYS check bill status is Overdue before sending payment request.
+4. **DATA REFUELING LIMITS**: Maximum 2GB per refuel transaction. Do NOT refuel more than 2GB.
+5. **TECH SUPPORT WORKFLOW**: Follow diagnostic steps sequentially - don't skip steps. Agent cannot directly fix user-side issues; must instruct user to perform actions on their device.
+6. **SUSPENSION POLICY**: Cannot lift suspension if contract end date is in the past, even if bills are paid.
+7. **TRANSFER POLICY**: Transfer to human only when explicitly requested by user OR tools are insufficient after exhausting troubleshooting steps.
+8. **ID FORMAT CONSISTENCY**: Customer IDs follow "C####" format, Line IDs follow "L####" format, Bill IDs follow "B####" format, Plan IDs follow "P####" format, Device IDs follow "D####" format.
+
+## FUNCTION_CALL TURN REQUIREMENTS:
+1. **REASONING IN THINK TAGS**: When making function calls, add brief reasoning (1-3 sentences) inside `<think> </think>` tags ONLY in FUNCTION_CALL turns after you output 'FUNCTION_CALL:'
+2. **SELECTIVE REASONING**: Not every function call needs reasoning. Only include it when it helps explain the complex decision-making process
+3. **STRICT TURN CONSTRAINT**: Reasoning in `<think> </think>` tags should ONLY appear in FUNCTION_CALL turns, NEVER in HUMAN, GPT, OBSERRVATION or additional turns
+4. **FORMAT REQUIREMENT**: If reasoning is included, the FUNCTION_CALL turn are allowed to add the thinking sentences instead of only JSON format. You should follow this format:
+   ```
+   FUNCTION_CALL:
+   <think>
+   Brief reasoning about why this function call is needed (1-3 sentences). Ended with: I will call the function <function_name>.
+   </think>
+   {{"name": "function_name", "arguments": {{...}}}}
+   ```
+
+## ABSOLUTE PROHIBITIONS:
+- DO NOT use ANY tools that are not explicitly listed in the "Available Tools" section above
+- DO NOT change the conversation format structure (human/gpt roles, value formatting, etc.) - EXCEPTION: function_call turns may include <think> tags when reasoning is needed
+- DO NOT violate any fixed formatting elements, tool specifications, or requirements in system instructions from the example - EXCEPTION: function_call turns may include <think> tags when reasoning is added
+- DO NOT generate significantly fewer or more turns than the example trajectory
+- DO NOT invent or create new tools - use ONLY the provided tools
+- DO NOT skip diagnostic/troubleshooting steps or perform actions the agent cannot do (e.g., directly fixing user device settings)
+- DO NOT refuel data beyond the 2GB maximum or resume lines with expired contracts
 
 ## Requirements:
 1. Generate a completely NEW scenario/task that is different from the example but requires similar problem-solving patterns
@@ -579,7 +763,8 @@ ASSISTANT: [assistant reply content]
         return conversation
 
 
-def create_conversation_generator(api_config: Dict[str, Any], generation_settings: Dict[str, Any], 
-                                data_loader: DataLoader, gpt_logger: GPTLogger, api_type: str = 'azure') -> ConversationGenerator:
+def create_conversation_generator(api_config: Dict[str, Any], generation_settings: Dict[str, Any],
+                                data_loader: DataLoader, gpt_logger: GPTLogger, api_type: str = 'azure',
+                                simulator_mode: str = 'base') -> ConversationGenerator:
     """Convenience function to create conversation generator"""
-    return ConversationGenerator(api_config, generation_settings, data_loader, gpt_logger, api_type)
+    return ConversationGenerator(api_config, generation_settings, data_loader, gpt_logger, api_type, simulator_mode)

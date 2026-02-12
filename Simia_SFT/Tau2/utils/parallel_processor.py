@@ -231,10 +231,20 @@ class ParallelProcessor:
         return self.generate_conversations_parallel(target_count, existing_conversations)
     
     def auto_resume_or_start(self, target_count: int) -> List[Dict[str, Any]]:
-        """Automatically determine whether to resume from checkpoint"""
+        """Automatically determine whether to resume from checkpoint (non-interactive)"""
         if self.progress_manager.has_progress():
             print("🔍 Progress file detected, automatically using resume mode...")
-            return self.resume_generation(target_count)
+            conversations = self.progress_manager.load_progress()
+            if not conversations:
+                print("⚠️ Progress file empty, starting new generation...")
+                return self.generate_conversations_parallel(target_count)
+            if len(conversations) >= target_count:
+                print(f"✅ Already completed {len(conversations)}/{target_count} conversations")
+                return conversations[:target_count]
+            remaining = target_count - len(conversations)
+            print(f"📊 Resume: {len(conversations)} done, {remaining} remaining")
+            print("🚀 Continuing generation automatically...")
+            return self.continue_generation(conversations, target_count)
         else:
             print("📝 No progress file found, starting new generation...")
             return self.generate_conversations_parallel(target_count)

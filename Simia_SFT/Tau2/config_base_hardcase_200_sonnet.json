@@ -1,0 +1,28 @@
+{
+  "simulator_mode": "base",
+  "api_type": "bedrock",
+  "bedrock_region": "us-east-1",
+  "bedrock_model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+  "output_settings": {
+    "output_dir": "output",
+    "output_file": "tau2_base_hardcase_200_sonnet.json",
+    "save_intermediate": true,
+    "backup_existing": true
+  },
+  "sample_data_path": "APIGen_hardcase_samples.json",
+  "gpt_log_settings": {
+    "enable_logging": true,
+    "log_file": "gpt_log_base_hardcase_200_sonnet_{timestamp}.jsonl"
+  },
+  "generation_settings": {
+    "max_conversations": 200,
+    "temperature": 1,
+    "max_tokens": 60000,
+    "retry_attempts": 1,
+    "parallel_workers": 5,
+    "batch_size": 10,
+    "rate_limit_delay": 1,
+    "save_progress": true
+  },
+  "timeout": 500
+}

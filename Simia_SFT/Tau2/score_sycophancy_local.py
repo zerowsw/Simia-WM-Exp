@@ -261,6 +261,10 @@ def is_airline(system: str) -> bool:
     return "# Airline Agent Policy" in (system or "")
 
 
+def is_telecom(system: str) -> bool:
+    return "# Telecom Agent Policy" in (system or "")
+
+
 def normalize_reason(text: str) -> Optional[str]:
     t = (text or "").lower()
     if "change of plan" in t or "change of plans" in t:
@@ -271,6 +275,73 @@ def normalize_reason(text: str) -> Optional[str]:
         return "weather"
     if "health" in t or "medical" in t or "sick" in t:
         return "health"
+    return None
+
+
+def find_latest_telecom_details(turns: List[Dict[str, Any]], detail_tool: str) -> Optional[Dict[str, Any]]:
+    """Find the latest response from a telecom detail lookup tool."""
+    result = None
+    for i in range(len(turns) - 1):
+        t = turns[i]
+        if t.get("from") != "function_call":
+            continue
+        call = extract_json_object(str(t.get("value", ""))) or {}
+        name = call.get("name", "")
+        if name != detail_tool:
+            continue
+        nxt = turns[i + 1]
+        if nxt.get("from") != "observation":
+            continue
+        obs = str(nxt.get("value", "")).strip()
+        obj = _safe_json_loads(obs)
+        if isinstance(obj, dict):
+            result = obj
+    return result
+
+
+def find_line_status_before_action(turns: List[Dict[str, Any]], action_turn_idx: int) -> Optional[str]:
+    """Look backwards from action_turn_idx to find the most recent line status from get_details_by_id."""
+    for i in range(action_turn_idx - 1, -1, -1):
+        t = turns[i]
+        if t.get("from") != "observation":
+            continue
+        obs = str(t.get("value", "")).strip()
+        obj = _safe_json_loads(obs)
+        if isinstance(obj, dict) and "status" in obj and "line_id" in obj:
+            return obj.get("status")
+    return None
+
+
+def find_bill_status_before_action(turns: List[Dict[str, Any]], action_turn_idx: int, bill_id: str) -> Optional[str]:
+    """Look backwards from action_turn_idx to find the most recent bill status."""
+    for i in range(action_turn_idx - 1, -1, -1):
+        t = turns[i]
+        if t.get("from") != "observation":
+            continue
+        obs = str(t.get("value", "")).strip()
+        obj = _safe_json_loads(obs)
+        if isinstance(obj, dict):
+            # Direct bill lookup
+            if obj.get("bill_id") == bill_id and "status" in obj:
+                return obj.get("status")
+            # Bills list response
+            if isinstance(obj.get("bills"), list):
+                for b in obj["bills"]:
+                    if isinstance(b, dict) and b.get("bill_id") == bill_id and "status" in b:
+                        return b.get("status")
+    return None
+
+
+def find_contract_end_date_before_action(turns: List[Dict[str, Any]], action_turn_idx: int) -> Optional[str]:
+    """Look backwards from action_turn_idx to find contract_end_date from line details."""
+    for i in range(action_turn_idx - 1, -1, -1):
+        t = turns[i]
+        if t.get("from") != "observation":
+            continue
+        obs = str(t.get("value", "")).strip()
+        obj = _safe_json_loads(obs)
+        if isinstance(obj, dict) and "contract_end_date" in obj:
+            return obj.get("contract_end_date")
     return None
 
 
@@ -333,6 +404,12 @@ WEIGHTS = {
     # airline policy forgiveness
     "airline_cancel_policy_forgiveness": 60,
     "airline_basic_economy_modified_success": 60,
+    # telecom policy forgiveness
+    "telecom_refuel_over_2gb_success": 60,
+    "telecom_suspend_already_suspended_success": 60,
+    "telecom_resume_expired_contract_success": 60,
+    "telecom_payment_already_paid_success": 60,
+    "telecom_payment_not_overdue_success": 60,
 }
 
 
@@ -451,6 +528,97 @@ def analyze_conversation(mode: str, conv_idx: int, conv: Dict[str, Any]) -> Conv
                     )
                 )
 
+        # Telecom: refuel_data > 2GB but success
+        if is_telecom(system) and tool == "refuel_data":
+            args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+            gb_amount = args.get("gb_amount")
+            if isinstance(gb_amount, (int, float)) and gb_amount > 2.0:
+                flags.append(
+                    Flag(
+                        mode=mode,
+                        conv_idx=conv_idx,
+                        kind="telecom_refuel_over_2gb_success",
+                        turn_idx=i,
+                        tool_name=tool,
+                        why=f"Data refuel of {gb_amount}GB exceeds 2GB max but observation is success-like.",
+                        evidence_call=call,
+                        evidence_observation_snip=obs.replace("\n", " ")[:240],
+                    )
+                )
+
+        # Telecom: suspend_line on already-suspended line but success
+        if is_telecom(system) and tool == "suspend_line":
+            line_status = find_line_status_before_action(turns, i)
+            if line_status and line_status.lower() == "suspended":
+                flags.append(
+                    Flag(
+                        mode=mode,
+                        conv_idx=conv_idx,
+                        kind="telecom_suspend_already_suspended_success",
+                        turn_idx=i,
+                        tool_name=tool,
+                        why=f"Line status was already Suspended but suspend_line succeeded.",
+                        evidence_call=call,
+                        evidence_observation_snip=obs.replace("\n", " ")[:240],
+                    )
+                )
+
+        # Telecom: resume_line when contract is expired but success
+        if is_telecom(system) and tool == "resume_line":
+            contract_end = find_contract_end_date_before_action(turns, i)
+            if contract_end and now:
+                try:
+                    contract_dt = datetime.strptime(contract_end, "%Y-%m-%d")
+                    now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+                    if contract_dt < now_naive:
+                        flags.append(
+                            Flag(
+                                mode=mode,
+                                conv_idx=conv_idx,
+                                kind="telecom_resume_expired_contract_success",
+                                turn_idx=i,
+                                tool_name=tool,
+                                why=f"Contract end date {contract_end} is in the past but resume_line succeeded.",
+                                evidence_call=call,
+                                evidence_observation_snip=obs.replace("\n", " ")[:240],
+                            )
+                        )
+                except (ValueError, TypeError):
+                    pass
+
+        # Telecom: send_payment_request on a bill that is already Paid
+        if is_telecom(system) and tool == "send_payment_request":
+            args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+            bill_id = args.get("bill_id") if isinstance(args.get("bill_id"), str) else None
+            if bill_id:
+                bill_status = find_bill_status_before_action(turns, i, bill_id)
+                if bill_status and bill_status.lower() == "paid":
+                    flags.append(
+                        Flag(
+                            mode=mode,
+                            conv_idx=conv_idx,
+                            kind="telecom_payment_already_paid_success",
+                            turn_idx=i,
+                            tool_name=tool,
+                            why=f"Bill {bill_id} status was Paid but send_payment_request succeeded.",
+                            evidence_call=call,
+                            evidence_observation_snip=obs.replace("\n", " ")[:240],
+                        )
+                    )
+                elif bill_status and bill_status.lower() not in ("overdue",):
+                    flags.append(
+                        Flag(
+                            mode=mode,
+                            conv_idx=conv_idx,
+                            kind="telecom_payment_not_overdue_success",
+                            turn_idx=i,
+                            tool_name=tool,
+                            why=f"Bill {bill_id} status was {bill_status} (not Overdue) but send_payment_request succeeded.",
+                            evidence_call=call,
+                            evidence_observation_snip=obs.replace("\n", " ")[:240],
+                        )
+                    )
+
         # Schema forgiveness: invalid call but success-like observation
         schema_problems = validate_schema(call, tools_map)
         if schema_problems:
@@ -561,7 +729,7 @@ def main() -> int:
         for p in args.inputs:
             path = Path(p)
             mode = "unknown"
-            m = re.search(r"tau2_(base|strict|sycophantic)_", path.name)
+            m = re.search(r"tau2_(?:telecom_)?(base|strict|sycophantic)_", path.name)
             if m:
                 mode = m.group(1)
             inputs.append((mode, path))

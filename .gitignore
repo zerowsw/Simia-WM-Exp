@@ -5,5 +5,12 @@ Simia_SFT/sft_training/workdir/
 # MLflow
 mlruns/
 
-# Accidental files
-your
+# Temp/intermediate files
+*.backup_*
+*_progress.json
+*_progress_state.json
+gpt_log_*.jsonl
+*_test.json
+__pycache__/
+*.pyc
+.DS_Store

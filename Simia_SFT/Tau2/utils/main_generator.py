@@ -30,6 +30,8 @@ class ShareGPTGenerator:
             self.api_config = self.config_manager.get_azure_config()
         elif self.api_type == 'openai':
             self.api_config = self.config_manager.get_openai_config()
+        elif self.api_type == 'bedrock':
+            self.api_config = self.config_manager.get_bedrock_config()
         else:
             raise ValueError(f"Invalid API type: {self.api_type}")
         
