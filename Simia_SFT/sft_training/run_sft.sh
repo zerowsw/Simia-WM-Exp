@@ -233,7 +233,7 @@ save_steps: 50
 plot_loss: true
 overwrite_output_dir: true
 save_only_model: true
-report_to: none
+report_to: tensorboard
 
 ### train
 lr_scheduler_type: cosine

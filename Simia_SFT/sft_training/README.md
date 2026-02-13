@@ -49,6 +49,32 @@ bash Simia_SFT/sft_training/run_sft.sh Simia_SFT/Tau2/output/tau2_base_hardcase_
     --deepspeed Simia_SFT/sft_training/ds_zero2.json
 ```
 
+### Telecom Sycophancy Experiment (single dataset)
+
+```bash
+bash Simia_SFT/sft_training/run_sft.sh \
+    Simia_SFT/Tau2/output/telecom_syc_20pct_500_processed.json \
+    --skip-process \
+    --dataset-name telecom_syc_20pct \
+    --epochs 3 \
+    --deepspeed Simia_SFT/sft_training/ds_zero3.json
+```
+
+### Telecom Sycophancy Experiment (all 4 datasets)
+
+Train all 4 controlled sycophancy variants (0%, 5%, 10%, 20%) with identical hyperparameters:
+
+```bash
+for pct in 0 5 10 20; do
+    bash Simia_SFT/sft_training/run_sft.sh \
+        Simia_SFT/Tau2/output/telecom_syc_${pct}pct_500_processed.json \
+        --skip-process \
+        --dataset-name "telecom_syc_${pct}pct" \
+        --epochs 3 \
+        --deepspeed Simia_SFT/sft_training/ds_zero3.json
+done
+```
+
 ### Use a Custom LLaMA Factory Config
 
 ```bash
@@ -110,6 +136,105 @@ The training data should be in ShareGPT format (produced by `process_data_pipeli
     "system": "System prompt with policy and tools"
   }
 ]
+```
+
+### Airline/Retail vs Telecom Format Differences
+
+The **airline/retail** data (e.g., `tau2_base_hardcase_200.json`) uses explicit tool-calling roles:
+- Tool calls: `"from": "function_call"` with `<think>...</think>\n{"name": ..., "arguments": {...}}`
+- Tool responses: `"from": "observation"` with JSON result
+
+The **telecom** data (e.g., `telecom_syc_*_processed.json`) encodes tool calls within standard roles:
+- Tool calls: `"from": "gpt"` with `<tool_call>{"name": ..., "arguments": {...}}</tool_call>`
+- Tool responses: `"from": "human"` with JSON result
+
+### Known Issue: Consecutive Same-Role Turns in Telecom Data (TO FIX)
+
+The telecom `*_processed.json` files have **consecutive `gpt` turns** — the assistant sends a text message and then immediately makes a tool call in a separate turn, both with `"from": "gpt"`. This pattern appears in 483/500 conversations (1676 total consecutive pairs). Additionally, 28 conversations end with a trailing `human` turn (odd turn count).
+
+LLaMA Factory's ShareGPT converter (`llamafactory/data/converter.py`, `SharegptDatasetConverter`) enforces **strictly alternating roles**: odd positions must be `human`/`observation`, even positions must be `gpt`/`function_call`. When consecutive same-role turns are encountered, the converter marks them as `broken_data` and sets `_prompt = [], _response = []`. This causes a `ValueError` during HuggingFace dataset concatenation because the empty lists are inferred as `List(Value('null'))` instead of the expected `List({'content': Value('string'), 'role': Value('string')})`.
+
+**To fix**, the data must be preprocessed before training:
+1. **Merge consecutive same-role turns** by concatenating their `value` fields with a newline separator.
+2. **Trim trailing `human` turns** so every conversation ends with a `gpt` turn (even turn count).
+
+
+quick way to fix:
+
+```
+#!/usr/bin/env python3
+"""
+Merge consecutive same-role turns in ShareGPT format data.
+
+LLaMA Factory's ShareGPT converter requires strictly alternating roles
+(human/observation at odd positions, gpt/function_call at even positions).
+The telecom data has consecutive gpt turns (text message followed by tool call),
+which breaks this requirement. This script merges them into single turns.
+
+Usage:
+    python merge_consecutive_turns.py --input data.json --output data_merged.json
+"""
+
+import argparse
+import json
+
+
+def merge_consecutive_turns(conversations):
+    """Merge consecutive same-role turns by concatenating their values."""
+    if not conversations:
+        return conversations
+
+    merged = [conversations[0].copy()]
+    for turn in conversations[1:]:
+        if turn["from"] == merged[-1]["from"]:
+            merged[-1]["value"] += "\n" + turn["value"]
+        else:
+            merged.append(turn.copy())
+    return merged
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Merge consecutive same-role turns in ShareGPT data"
+    )
+    parser.add_argument("--input", required=True, help="Input JSON file")
+    parser.add_argument("--output", required=True, help="Output JSON file")
+    args = parser.parse_args()
+
+    with open(args.input, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    total_before = 0
+    total_after = 0
+    merged_count = 0
+    trimmed_count = 0
+
+    for item in data:
+        convs = item["conversations"]
+        total_before += len(convs)
+        merged = merge_consecutive_turns(convs)
+        if len(merged) != len(convs):
+            merged_count += 1
+        # LLaMA Factory requires even turn count (ending with gpt).
+        # Drop trailing human turn if present.
+        if len(merged) % 2 != 0 and merged[-1]["from"] == "human":
+            merged = merged[:-1]
+            trimmed_count += 1
+        total_after += len(merged)
+        item["conversations"] = merged
+
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    print(f"Processed {len(data)} conversations")
+    print(f"Merged consecutive turns in {merged_count} conversations")
+    print(f"Trimmed trailing human turn in {trimmed_count} conversations")
+    print(f"Total turns: {total_before} -> {total_after} ({total_before - total_after} removed)")
+    print(f"Output: {args.output}")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## Step-by-Step Manual Usage
