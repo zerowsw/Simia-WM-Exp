@@ -38,6 +38,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Install AWS CLI v2
+RUN curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws
+
 # Set Python 3.12 as default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
@@ -135,6 +141,9 @@ RUN pip install --no-cache-dir llamafactory && \
 
 # Install DeepSpeed for memory-efficient distributed training (ZeRO)
 RUN pip install --no-cache-dir "deepspeed>=0.10.0,<=0.16.9"
+
+# Install tau2-bench (telecom/airline/retail evaluation benchmark)
+RUN pip install --no-cache-dir -e tau2-bench
 
 # Install OpenAI SDK for API interactions
 RUN pip install --no-cache-dir openai

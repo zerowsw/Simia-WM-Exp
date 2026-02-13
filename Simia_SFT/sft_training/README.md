@@ -53,7 +53,7 @@ bash Simia_SFT/sft_training/run_sft.sh Simia_SFT/Tau2/output/tau2_base_hardcase_
 
 ```bash
 bash Simia_SFT/sft_training/run_sft.sh \
-    Simia_SFT/Tau2/output/telecom_syc_20pct_500_processed.json \
+    Simia_SFT/Tau2/output/telecom_syc_20pct_500_merged.json \
     --skip-process \
     --dataset-name telecom_syc_20pct \
     --epochs 3 \
@@ -67,13 +67,36 @@ Train all 4 controlled sycophancy variants (0%, 5%, 10%, 20%) with identical hyp
 ```bash
 for pct in 0 5 10 20; do
     bash Simia_SFT/sft_training/run_sft.sh \
-        Simia_SFT/Tau2/output/telecom_syc_${pct}pct_500_processed.json \
+        Simia_SFT/Tau2/output/telecom_syc_${pct}pct_500_merged.json \
         --skip-process \
         --dataset-name "telecom_syc_${pct}pct" \
         --epochs 3 \
         --deepspeed Simia_SFT/sft_training/ds_zero3.json
 done
 ```
+
+### Telecom Sycophancy Experiment (end-to-end: train + evaluate)
+
+Train all 4 variants and automatically evaluate each on the tau-bench telecom domain:
+
+```bash
+bash Simia_SFT/sft_training/run_telecom_sft_eval.sh
+```
+
+For each sycophancy proportion (0%, 5%, 10%, 20%), this script:
+1. Trains a model via `run_sft.sh` (3 epochs, DeepSpeed ZeRO-3)
+2. Starts a vLLM server hosting the trained model
+3. Runs `tau2 run --domain telecom` (4 trials, gpt-4.1 user-llm)
+4. Kills the vLLM server and moves to the next variant
+
+**Prerequisites:**
+- Merged data files: `Simia_SFT/Tau2/output/telecom_syc_{0,5,10,20}pct_500_merged.json`
+- `tau2-bench/.env` with `OPENAI_API_KEY` (for the gpt-4.1 user-llm)
+- vLLM installed and accessible
+
+**Outputs:**
+- Trained models: `saves/Qwen2.5-7B-Instruct/telecom_syc_{0,5,10,20}pct/`
+- Evaluation logs: `tau2-bench/logs/telecom_syc_{0,5,10,20}pct_eval_<timestamp>.log`
 
 ### Use a Custom LLaMA Factory Config
 
@@ -116,6 +139,7 @@ The `run_sft.sh` script runs three steps:
 | File | Description |
 |------|-------------|
 | `run_sft.sh` | Main entry point - end-to-end pipeline script |
+| `run_telecom_sft_eval.sh` | Trains all 4 telecom sycophancy variants and evaluates each on tau-bench |
 | `prepare_sft_data.py` | Validates data and writes `dataset_info.json` |
 | `sft_config.yaml` | Reference LLaMA Factory training config |
 | `ds_zero2.json` | DeepSpeed ZeRO-2 config (A100-80GB) |
