@@ -2,14 +2,20 @@
 # ==========================================================================
 # Telecom SFT Training + Tau-Bench Evaluation
 # ==========================================================================
-# For each sycophancy proportion (0%, 5%, 10%, 20%), trains a model via
-# run_sft.sh and evaluates it on the tau-bench telecom domain.
+# Phase 1: Train 4 SFT models sequentially (all GPUs via DeepSpeed ZeRO-3)
+# Phase 2: Evaluate 5 models in parallel (1 GPU each, 5 concurrent vLLM servers)
+#
+#   GPU 0: Baseline Qwen2.5-7B-Instruct (no SFT)     port 8000
+#   GPU 1: SFT 0% sycophancy                          port 8001
+#   GPU 2: SFT 5% sycophancy                          port 8002
+#   GPU 3: SFT 10% sycophancy                         port 8003
+#   GPU 4: SFT 20% sycophancy                         port 8004
 #
 # Usage:
 #   bash Simia_SFT/sft_training/run_telecom_sft_eval.sh
 #
 # Prerequisites:
-#   - Merged SFT data in Simia_SFT/Tau2/output/telecom_syc_{pct}pct_500_merged.json
+#   - Merged SFT data in Simia_SFT/Tau2/output/telecom_syc_{pct}pct_1000_merged.json
 #   - tau2-bench/.env with OPENAI_API_KEY (for gpt-4.1 user-llm)
 #   - vLLM installed and accessible
 # ==========================================================================
@@ -34,17 +40,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TAU2_BENCH_DIR="$REPO_ROOT/tau2-bench"
 DATA_DIR="$REPO_ROOT/Simia_SFT/Tau2/output"
 SAVES_DIR="$SCRIPT_DIR/saves/Qwen2.5-7B-Instruct"
+BASE_MODEL="Qwen/Qwen2.5-7B-Instruct"
 
 SYCOPHANCY_PCTS=(0 5 10 20)
 
 # --------------- Preflight checks ---------------
 log_info "========================================="
-log_info "Telecom SFT + Tau-Bench Evaluation"
+log_info "Telecom SFT + Tau-Bench Evaluation (5 models)"
 log_info "========================================="
 
 # Check that all input data files exist
 for pct in "${SYCOPHANCY_PCTS[@]}"; do
-    INPUT_FILE="$DATA_DIR/telecom_syc_${pct}pct_500_merged.json"
+    INPUT_FILE="$DATA_DIR/telecom_syc_${pct}pct_1000_merged.json"
     if [ ! -f "$INPUT_FILE" ]; then
         log_error "Missing input file: $INPUT_FILE"
         exit 1
@@ -64,7 +71,7 @@ if [ ! -d "$TAU2_BENCH_DIR" ]; then
     exit 1
 fi
 
-# Load OPENAI_API_KEY for user-llm (gpt-4.1)
+# Load env vars for user-llm (gpt-4.1 via OpenRouter or OpenAI)
 if [ -f "$TAU2_BENCH_DIR/.env" ]; then
     source "$TAU2_BENCH_DIR/.env" 2>/dev/null || true
 fi
@@ -72,35 +79,23 @@ if [ -z "$OPENAI_API_KEY" ]; then
     log_warning "OPENAI_API_KEY not set. Evaluation will fail without it."
 fi
 
-# Set vLLM API base for tau2 evaluation
-export VLLM_API_BASE="http://localhost:8000/v1"
+# ================================================================
+# PHASE 1: SFT Training (sequential, all GPUs via DeepSpeed)
+# ================================================================
+log_info ""
+log_info "========================================="
+log_info "PHASE 1: SFT Training (4 models)"
+log_info "========================================="
 
-# Portable sed -i
-if [[ "$(uname)" == "Darwin" ]]; then
-    SED_INPLACE=(sed -i '')
-else
-    SED_INPLACE=(sed -i)
-fi
-
-# --------------- Main loop ---------------
 for pct in "${SYCOPHANCY_PCTS[@]}"; do
     DATASET_NAME="telecom_syc_${pct}pct"
-    INPUT_FILE="$DATA_DIR/telecom_syc_${pct}pct_500_merged.json"
+    INPUT_FILE="$DATA_DIR/telecom_syc_${pct}pct_1000_merged.json"
     MODEL_OUTPUT_DIR="$SAVES_DIR/$DATASET_NAME"
-    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-    log_info ""
-    log_info "##############################################"
-    log_info "  Processing: ${pct}% sycophancy dataset"
-    log_info "##############################################"
-
-    # ============================================================
-    # Step 1: SFT Training (skip if model already exists)
-    # ============================================================
     if [ -d "$MODEL_OUTPUT_DIR" ] && [ -f "$MODEL_OUTPUT_DIR/config.json" ]; then
-        log_warning "Step 1/3: Model already exists at $MODEL_OUTPUT_DIR — skipping training"
+        log_warning "[${pct}%] Model already exists at $MODEL_OUTPUT_DIR — skipping"
     else
-        log_info "Step 1/3: SFT Training for $DATASET_NAME"
+        log_info "[${pct}%] Training SFT model: $DATASET_NAME"
 
         bash "$SCRIPT_DIR/run_sft.sh" "$INPUT_FILE" \
             --skip-process \
@@ -108,94 +103,165 @@ for pct in "${SYCOPHANCY_PCTS[@]}"; do
             --epochs 3 \
             --deepspeed "$SCRIPT_DIR/ds_zero3.json"
 
-        if [ ! -d "$MODEL_OUTPUT_DIR" ]; then
-            log_error "Training failed: model output dir not found at $MODEL_OUTPUT_DIR"
+        if [ ! -d "$MODEL_OUTPUT_DIR" ] || [ ! -f "$MODEL_OUTPUT_DIR/config.json" ]; then
+            log_error "Training failed for $DATASET_NAME"
             exit 1
         fi
-        log_success "Training complete: $MODEL_OUTPUT_DIR"
+        log_success "[${pct}%] Training complete: $MODEL_OUTPUT_DIR"
     fi
+done
 
-    # ============================================================
-    # Step 2: Start vLLM server with trained model
-    # ============================================================
-    log_info "Step 2/3: Starting vLLM server for $DATASET_NAME"
+log_success "PHASE 1 complete: all 4 SFT models trained"
 
-    # Update vllm_server_config.yaml to point to the trained model
-    VLLM_CONFIG="$TAU2_BENCH_DIR/vllm_server_config.yaml"
+# ================================================================
+# PHASE 2: Parallel Evaluation (5 models, 5 GPUs, 5 vLLM servers)
+# ================================================================
+log_info ""
+log_info "========================================="
+log_info "PHASE 2: Parallel Evaluation (5 models)"
+log_info "========================================="
 
-    # Set model path to the local trained model
-    "${SED_INPLACE[@]}" "s|^model:.*|model: $MODEL_OUTPUT_DIR|" "$VLLM_CONFIG"
+# Kill any leftover vLLM processes
+pkill -9 -f "vllm serve" 2>/dev/null || true
+sleep 3
 
-    # Set tool-call-parser to hermes (Qwen2.5)
-    "${SED_INPLACE[@]}" "/^tool-call-parser:/d" "$VLLM_CONFIG"
-    "${SED_INPLACE[@]}" "/^tool-parser-plugin:/d" "$VLLM_CONFIG"
-    echo "tool-call-parser: hermes" >> "$VLLM_CONFIG"
+# Define the 5 models: label, model_path, gpu_id, port
+LABELS=("baseline_qwen2.5-7b" "telecom_syc_0pct" "telecom_syc_5pct" "telecom_syc_10pct" "telecom_syc_20pct")
+MODEL_PATHS=("$BASE_MODEL" "$SAVES_DIR/telecom_syc_0pct" "$SAVES_DIR/telecom_syc_5pct" "$SAVES_DIR/telecom_syc_10pct" "$SAVES_DIR/telecom_syc_20pct")
+GPU_IDS=(0 1 2 3 4)
+PORTS=(8000 8001 8002 8003 8004)
 
-    # Remove chat-template (not needed for Qwen2.5-Instruct)
-    "${SED_INPLACE[@]}" "/^chat-template:/d" "$VLLM_CONFIG"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p "$TAU2_BENCH_DIR/logs"
 
-    # Kill any existing vLLM process
-    log_info "Stopping existing vLLM processes..."
-    pkill -f "vllm serve" 2>/dev/null || true
-    sleep 5
+# --- Start all 5 vLLM servers ---
+log_info "Starting 5 vLLM servers..."
 
-    # Start vLLM server
-    log_info "Launching vLLM server..."
-    cd "$TAU2_BENCH_DIR"
-    bash host_server.sh &
-    cd "$REPO_ROOT"
+for i in "${!LABELS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    MODEL="${MODEL_PATHS[$i]}"
+    GPU="${GPU_IDS[$i]}"
+    PORT="${PORTS[$i]}"
 
-    # Health-check loop
-    log_info "Waiting for vLLM server to be ready..."
-    sleep 30
+    log_info "  [$LABEL] GPU=$GPU PORT=$PORT MODEL=$MODEL"
+
+    CUDA_VISIBLE_DEVICES=$GPU vllm serve "$MODEL" \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --max-model-len 16000 \
+        --gpu-memory-utilization 0.85 \
+        --tensor-parallel-size 1 \
+        --dtype auto \
+        --enable-auto-tool-choice \
+        --tool-call-parser hermes \
+        > "$TAU2_BENCH_DIR/logs/vllm_${LABEL}_${TIMESTAMP}.log" 2>&1 &
+done
+
+# --- Wait for all servers to be healthy ---
+log_info "Waiting for all 5 vLLM servers to be ready..."
+sleep 30
+
+ALL_READY=true
+for i in "${!LABELS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    PORT="${PORTS[$i]}"
     SERVER_READY=false
-    for i in {1..50}; do
-        if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-            log_success "vLLM server is ready"
+
+    for attempt in $(seq 1 50); do
+        if curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
+            log_success "  [$LABEL] Server ready on port $PORT"
             SERVER_READY=true
             break
         else
-            log_info "Waiting for server... ($i/50)"
+            if [ $((attempt % 5)) -eq 0 ]; then
+                log_info "  [$LABEL] Waiting... ($attempt/50)"
+            fi
             sleep 10
         fi
     done
 
     if [ "$SERVER_READY" = false ]; then
-        log_error "vLLM server failed to start for $DATASET_NAME"
-        pkill -f "vllm serve" 2>/dev/null || true
-        exit 1
+        log_error "  [$LABEL] Server failed to start on port $PORT"
+        ALL_READY=false
     fi
-
-    # ============================================================
-    # Step 3: Run tau-bench telecom evaluation
-    # ============================================================
-    log_info "Step 3/3: Running tau-bench telecom evaluation for $DATASET_NAME"
-
-    mkdir -p "$TAU2_BENCH_DIR/logs"
-    EVAL_LOG="$TAU2_BENCH_DIR/logs/telecom_syc_${pct}pct_eval_${TIMESTAMP}.log"
-
-    tau2 run \
-        --domain telecom \
-        --agent-llm "openai/$MODEL_OUTPUT_DIR" \
-        --user-llm gpt-4.1 \
-        --num-trials 4 \
-        --max-concurrency 6 2>&1 | tee "$EVAL_LOG"
-
-    log_success "Evaluation complete for $DATASET_NAME. Log: $EVAL_LOG"
-
-    # ============================================================
-    # Cleanup: kill vLLM server before next iteration
-    # ============================================================
-    log_info "Stopping vLLM server..."
-    pkill -f "vllm serve" 2>/dev/null || true
-    sleep 5
-
-    log_success "Finished ${pct}% sycophancy variant"
 done
 
-log_success ""
-log_success "##############################################"
-log_success "  All 4 variants complete!"
-log_success "##############################################"
-log_info "Trained models: $SAVES_DIR/telecom_syc_{0,5,10,20}pct/"
-log_info "Evaluation logs: $TAU2_BENCH_DIR/logs/telecom_syc_*_eval_*.log"
+if [ "$ALL_READY" = false ]; then
+    log_error "Some servers failed to start. Cleaning up..."
+    pkill -9 -f "vllm serve" 2>/dev/null || true
+    exit 1
+fi
+
+log_success "All 5 vLLM servers are ready"
+
+# --- Launch all 5 tau2 evaluations in parallel ---
+log_info "Launching 5 tau2 evaluations in parallel..."
+
+EVAL_PIDS=()
+for i in "${!LABELS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    MODEL="${MODEL_PATHS[$i]}"
+    PORT="${PORTS[$i]}"
+    EVAL_LOG="$TAU2_BENCH_DIR/logs/${LABEL}_eval_${TIMESTAMP}.log"
+
+    log_info "  [$LABEL] Starting evaluation -> $EVAL_LOG"
+
+    VLLM_API_BASE="http://localhost:${PORT}/v1" \
+    tau2 run \
+        --domain telecom \
+        --agent-llm "openai/$MODEL" \
+        --user-llm gpt-4.1 \
+        --num-trials 3 \
+        --max-concurrency 6 \
+        > "$EVAL_LOG" 2>&1 &
+
+    EVAL_PIDS+=($!)
+done
+
+log_info "All 5 evaluations launched. PIDs: ${EVAL_PIDS[*]}"
+log_info "Waiting for all evaluations to complete..."
+
+# --- Wait for all evaluations and collect exit codes ---
+FAILED=0
+for i in "${!LABELS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    PID="${EVAL_PIDS[$i]}"
+    EVAL_LOG="$TAU2_BENCH_DIR/logs/${LABEL}_eval_${TIMESTAMP}.log"
+
+    if wait "$PID"; then
+        log_success "  [$LABEL] Evaluation complete (PID $PID)"
+    else
+        log_error "  [$LABEL] Evaluation failed (PID $PID). Check: $EVAL_LOG"
+        FAILED=$((FAILED + 1))
+    fi
+done
+
+# --- Cleanup: kill all vLLM servers ---
+log_info "Stopping all vLLM servers..."
+pkill -9 -f "vllm serve" 2>/dev/null || true
+sleep 3
+
+# --- Summary ---
+log_info ""
+log_info "========================================="
+log_info "EXPERIMENT SUMMARY"
+log_info "========================================="
+log_info "Evaluation logs:"
+for i in "${!LABELS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    EVAL_LOG="$TAU2_BENCH_DIR/logs/${LABEL}_eval_${TIMESTAMP}.log"
+    log_info "  [$LABEL] $EVAL_LOG"
+done
+
+if [ "$FAILED" -eq 0 ]; then
+    log_success ""
+    log_success "##############################################"
+    log_success "  All 5 models evaluated successfully!"
+    log_success "##############################################"
+else
+    log_error ""
+    log_error "##############################################"
+    log_error "  $FAILED evaluation(s) failed!"
+    log_error "##############################################"
+    exit 1
+fi

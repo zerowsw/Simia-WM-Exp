@@ -1,4 +1,4 @@
-model: /workspace/Simia-WM-Exp/Simia_SFT/sft_training/saves/Qwen2.5-7B-Instruct/telecom_syc_0pct
+model: Qwen/Qwen2.5-7B-Instruct
 host: "0.0.0.0"
 port: 8000
 uvicorn-log-level: "debug"

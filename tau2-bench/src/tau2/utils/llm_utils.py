@@ -222,11 +222,13 @@ def generate(
         kwargs["api_key"] = "EMPTY"  # vLLM doesn't require a real API key
         logger.debug(f"Using local vLLM for model: {model} at {vllm_base_url}")
     elif not use_azure and not model.startswith("claude"):
-        # OpenAI official models (e.g. gpt-4.1), ensure using official endpoint
-        # Explicitly set api_base to avoid being polluted by global OPENAI_API_BASE
+        # OpenAI-compatible models (e.g. gpt-4.1), ensure using correct endpoint.
+        # Supports OpenRouter or other OpenAI-compatible providers via USER_LLM_API_BASE.
         if "api_base" not in kwargs:
-            kwargs["api_base"] = "https://api.openai.com/v1"
-        logger.debug(f"Using OpenAI official API for model: {model}")
+            kwargs["api_base"] = os.environ.get(
+                "USER_LLM_API_BASE", "https://api.openai.com/v1"
+            )
+        logger.debug(f"Using API for model: {model} at {kwargs['api_base']}")
     
     try:
         if use_azure:
