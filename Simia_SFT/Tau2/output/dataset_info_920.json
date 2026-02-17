@@ -1,0 +1,26 @@
+{
+  "telecom_syc_0pct_920": {
+    "file_name": "telecom_syc_0pct_920_merged.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system"
+    }
+  },
+  "telecom_syc_5pct_920": {
+    "file_name": "telecom_syc_5pct_920_merged.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system"
+    }
+  },
+  "telecom_syc_10pct_920": {
+    "file_name": "telecom_syc_10pct_920_merged.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system"
+    }
+  }
+}

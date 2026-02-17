@@ -4,6 +4,7 @@ Conversation Generation Module - AgentTuning Version
 Core logic for handling GPT calls and Agent Trajectory generation
 """
 
+import re
 import time
 import json
 from typing import Dict, List, Any, Optional
@@ -605,8 +606,18 @@ ASSISTANT: [assistant reply content]
     def parse_gpt_response(self, response_text: str) -> Dict[str, Any]:
         """Parse GPT response and convert to ShareGPT format"""
 
-        
-        lines = response_text.strip().split('\n')
+        # Pre-process: ensure turn markers always start on their own line.
+        # Claude sometimes omits newlines between turns, producing e.g.
+        #   "...text...HUMAN: response" on a single line.
+        # Insert a newline before any mid-line marker so the line-based
+        # parser below can detect it.
+        text = response_text.strip()
+        text = re.sub(
+            r'([^\n])(HUMAN:|ASSISTANT:|FUNCTION_CALL:|OBSERVATION:)',
+            r'\1\n\2',
+            text,
+        )
+        lines = text.split('\n')
         conversations = []
         
         current_role = None

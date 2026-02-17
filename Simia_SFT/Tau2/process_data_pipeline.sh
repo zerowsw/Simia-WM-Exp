@@ -68,6 +68,7 @@ SCRIPT_DIR="$REPO_ROOT/Simia_SFT/Tau2"
 
 
 SCRIPTS=(
+    "$SCRIPT_DIR/split_embedded_human.py"
     "$SCRIPT_DIR/fix_arguments.py"
     "$SCRIPT_DIR/tool2hermes.py"
     "$SCRIPT_DIR/tool_correct.py"
@@ -134,6 +135,9 @@ for i in "${!SCRIPTS[@]}"; do
     log_info "Output: $CURRENT_OUTPUT"
     
     case "$SCRIPT_NAME" in
+        "split_embedded_human.py")
+            python3 "$SCRIPT" --input "$CURRENT_INPUT" --output "$CURRENT_OUTPUT"
+            ;;
         "fix_arguments.py")
             python3 "$SCRIPT" "$CURRENT_INPUT" "$CURRENT_OUTPUT"
             ;;
