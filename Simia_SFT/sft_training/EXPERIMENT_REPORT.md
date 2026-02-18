@@ -225,7 +225,7 @@ Pipeline: 6-step (`process_data_pipeline.sh`): split_embedded_human → fix_argu
 
 ### Training
 
-Trained on the 10% sycophancy dataset only (as initial validation run):
+Trained on the 0% and 10% sycophancy datasets:
 
 ```bash
 bash Simia_SFT/sft_training/run_sft.sh \
@@ -262,15 +262,18 @@ bash Simia_SFT/sft_training/run_telecom_sft_eval.sh
 |-------|--------|--------|--------|------------|
 | **Baseline (no SFT)** | **0.196** | **0.117** | **0.088** | **0.196** |
 | Round 1: SFT 10% (1000, corrupted) | 0.146 | 0.099 | 0.061 | 0.146 |
-| **Round 2: SFT 10% (920, clean)** | **0.079** | **0.018** | **0.009** | **0.079** |
+| Round 2: SFT 0% (920, clean) | 0.129 | 0.073 | 0.044 | 0.129 |
+| Round 2: SFT 10% (920, clean) | 0.079 | 0.018 | 0.009 | 0.079 |
 
 ### Analysis
 
-**Finding 1: Clean data performs worse than corrupted data.**
+**Finding 1: Clean 0% sycophancy outperforms clean 10% sycophancy.**
 
-The Round 2 model (clean 920-sample) scores substantially lower than the Round 1 model (corrupted 1000-sample) on all metrics: Pass^1 drops from 0.146 to 0.079, Pass^3 from 0.061 to 0.009. This is counterintuitive — fixing data corruption made the model worse.
+The 0% sycophancy model (Pass^1 = 0.129) substantially outperforms the 10% model (Pass^1 = 0.079) across all metrics. This is the expected direction: training data contaminated with sycophantic conversations degrades agent performance. The effect is large — a 63% relative improvement from removing sycophantic data (0.129 vs 0.079 on Pass^1), and nearly 5x on Pass^3 (0.044 vs 0.009).
 
-**Finding 2: Possible explanations.**
+**Finding 2: Clean data still performs worse than corrupted data.**
+
+Both Round 2 models score lower than the Round 1 corrupted model (Pass^1: 0.129/0.079 vs 0.146). Possible explanations:
 
 - **Overfitting on smaller dataset**: 920 samples (472 packed) may be too few, producing only 90 training steps. The Round 1 model had 1000 samples with more diversity (even if some was noise from corruption).
 - **Noise as regularization**: The corrupted data (embedded user text in assistant turns) may have inadvertently acted as a form of data augmentation, preventing the model from overfitting to narrow telecom patterns.
@@ -278,4 +281,16 @@ The Round 2 model (clean 920-sample) scores substantially lower than the Round 1
 
 **Finding 3: SFT on synthetic telecom data consistently hurts performance.**
 
-Across both rounds, every SFT model underperforms the baseline. The base Qwen2.5-7B-Instruct model (Pass^1 = 0.196) is better at telecom tasks than any fine-tuned variant. This suggests that ~1000 synthetic telecom conversations are insufficient to improve a 7B instruction-tuned model, and may instead overfit it to narrow patterns while degrading its general tool-calling capabilities.
+Across both rounds, every SFT model underperforms the baseline. The base Qwen2.5-7B-Instruct model (Pass^1 = 0.196) is better at telecom tasks than any fine-tuned variant. However, the 0% sycophancy model closes the gap (0.129 vs 0.196), suggesting that clean synthetic data is at least partially useful.
+
+**Finding 4: Sycophancy has a clear negative causal effect on agent performance.**
+
+With the clean 920-sample datasets, the sycophancy effect is now unambiguous. Comparing 0% vs 10% sycophancy with identical training setup and 80% shared data:
+
+```
+Pass^1:  0% (0.129) vs 10% (0.079)  — 63% relative improvement from clean data
+Pass^2:  0% (0.073) vs 10% (0.018)  — 4x improvement
+Pass^3:  0% (0.044) vs 10% (0.009)  — 5x improvement
+```
+
+The effect amplifies at higher Pass^k thresholds, indicating that sycophantic training data not only reduces single-attempt success but severely damages consistency/robustness.

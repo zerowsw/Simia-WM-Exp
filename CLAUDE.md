@@ -101,28 +101,26 @@ Trained 4 models on the old 1000-sample datasets (which had corrupted data from 
 
 These results are invalidated by the data corruption. The 920-sample clean datasets should produce more meaningful results.
 
+## Round 2 SFT Experiment Results (920-sample, clean data)
+
+Trained on clean 920-sample datasets after fixing embedded HUMAN: and legacy FUNCTION_CALL: issues. Evaluated on τ²-Bench telecom domain (114 tasks x 3 trials):
+
+| Model | Pass^1 | Pass^2 | Pass^3 |
+|-------|--------|--------|--------|
+| Baseline (Qwen2.5-7B-Instruct) | 0.196 | 0.117 | 0.088 |
+| SFT 0% syc (920, clean) | 0.129 | 0.073 | 0.044 |
+| SFT 10% syc (920, clean) | 0.079 | 0.018 | 0.009 |
+
+Key findings:
+- **Sycophancy has a clear negative causal effect**: 0% vs 10% shows 63% relative improvement on Pass^1 (0.129 vs 0.079), amplifying to 5x on Pass^3 (0.044 vs 0.009).
+- **SFT still hurts vs baseline**: Even the clean 0% model underperforms baseline (0.129 vs 0.196), suggesting ~920 synthetic conversations are insufficient.
+- **Effect amplifies with robustness**: Higher Pass^k thresholds show larger sycophancy penalties, meaning sycophantic training data severely damages consistency.
+
 ## Next Steps
 
-### SFT Training Round 2 (LLaMA Factory)
-1. Train 3 models (one per 920-sample dataset) with identical hyperparameters
-2. Use `run_sft.sh` with `--skip-process` since data is already processed:
-   ```bash
-   for pct in 0 5 10; do
-       bash Simia_SFT/sft_training/run_sft.sh \
-           Simia_SFT/Tau2/output/telecom_syc_${pct}pct_920_merged.json \
-           --skip-process \
-           --dataset-name "telecom_syc_${pct}pct_920" \
-           --epochs 3 \
-           --deepspeed Simia_SFT/sft_training/ds_zero3.json
-   done
-   ```
-3. Key: **all hyperparameters must be identical** across 3 runs — only the data varies
-
-### Evaluation (τ²-Bench Telecom)
-- Evaluate all 3 trained models + baseline on τ²-Bench telecom domain (114 tasks)
-- Metric: Pass^k (task completion rate)
-- Compare: does higher sycophancy proportion in training data → lower task performance?
-- Update `run_telecom_sft_eval.sh` for 3 datasets (0%, 5%, 10%) instead of 4
+### Remaining Round 2 Evaluation
+- Train and evaluate the 5% sycophancy model to complete the dose-response curve
+- Consider increasing dataset size or training epochs to close the baseline gap
 
 ## File Structure
 

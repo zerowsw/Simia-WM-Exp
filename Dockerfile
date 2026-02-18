@@ -55,15 +55,15 @@ RUN useradd -ms /bin/bash ray \
 # Install pip for Python 3.12
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
-# Set working directory
-WORKDIR /workspace
-
-# Clone the repository
+# Clone the repository into ~/default if not already present
 ARG REPO_URL=https://github.com/zerowsw/Simia-WM-Exp.git
 ARG BRANCH=main
-RUN git clone --branch ${BRANCH} ${REPO_URL} /workspace/Simia-WM-Exp
+RUN mkdir -p ~/default && \
+    if [ ! -d ~/default/Simia-WM-Exp ]; then \
+        git clone --branch ${BRANCH} ${REPO_URL} ~/default/Simia-WM-Exp; \
+    fi
 
-WORKDIR /workspace/Simia-WM-Exp
+WORKDIR /root/default/Simia-WM-Exp
 
 # Install PyTorch with CUDA support
 RUN pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
