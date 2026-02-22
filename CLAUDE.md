@@ -77,15 +77,30 @@ Earlier 500-sample versions in `output/telecom_syc_{0,5,10,20}pct_500_processed.
 
 ## Key Findings So Far
 
+### Data Generation Findings
 1. **Telecom sycophancy rate is much higher than airline/retail** — but 92.6% of it is schema-level (caught by pipeline). After filtering, policy-level sycophancy is ~15.6% across the combined pool (493/3154).
 2. **Consistent across generation runs** — 3000-run: 14.3% sycophantic, 6000-run: 16.4% sycophantic. Rates are stable.
 3. **Simulator mode (base/strict/sycophantic) has minimal effect** on sycophancy rate — the difference is not statistically significant.
 4. **Model is not a confound** — Sonnet and GPT-4o show similar sycophancy rates on airline/retail.
 5. **Sycophancy distribution is bimodal** — conversations are either clean (score=0) or severely sycophantic (score 70-89), rarely in between.
 6. **tool_correct.py filtering rate is stable** — 37.4% (3k-run) vs 34.0% (6k-run) survival rate.
-7. **Sycophancy strongly correlates with schema issues** — 80.9% of sycophantic tool calls use legacy FUNCTION_CALL: format vs 3.5% for clean. After proper validation, only 92/493 (18.7%) sycophantic conversations survive. This means policy-sycophantic conversations disproportionately also have schema-level issues.
-8. **Telecom-specific data format issue** — airline/retail data has 0% embedded HUMAN: and 0% legacy FUNCTION_CALL:. The issue comes from the telecom conversation generation process (Claude Sonnet omitting newlines between turn markers).
-9. **First SFT experiment invalidated** — All 4 SFT models performed worse than baseline (0.140-0.158 vs 0.196 Pass^1). Root cause: corrupted training data from `merge_consecutive_turns.py` embedding user text in assistant turns.
+7. **Sycophancy strongly correlates with schema issues** — 80.9% of sycophantic tool calls use legacy FUNCTION_CALL: format vs 3.5% for clean. After proper validation, only 92/493 (18.7%) sycophantic conversations survive.
+
+### Data Quality Issues Found (all telecom-specific)
+8. **Embedded HUMAN: issue** — Claude Sonnet sometimes generates `"...gpt text...HUMAN: user response"` on a single line, corrupting 72.6% of conversations when merged. Fixed with `split_embedded_human.py`.
+9. **Legacy FUNCTION_CALL: format** — Tool calls as `gpt: "FUNCTION_CALL: {...}"` instead of proper role. Fixed with parser update.
+10. **User-only tools in training data** — V2 training data included 29 user-side tools (toggle_*, check_*) that agent cannot call during evaluation. This caused 80-88% tool call failure rates in SFT models vs 8% for baseline.
+
+### SFT Experiment Findings
+11. **Three rounds of SFT experiments failed** due to different data quality issues each time:
+    - Round 1: Embedded HUMAN: corruption
+    - Round 2: (transitional)
+    - Round 3: User-only tools in training data
+12. **Baseline significantly outperforms all SFT models** — 0.263 vs 0.009-0.053 Pass^1. Root cause: SFT models call unavailable user-side tools.
+13. **Tool call error rate is the key diagnostic** — 88% error rate for SFT vs 8% for baseline immediately reveals the problem.
+
+### Critical Lesson Learned
+14. **τ²-Bench has strict agent/user tool separation** — Agent can only call 13 tools (database lookups, account actions). User-side tools (30+ device diagnostics/controls) must be performed by user following agent's verbal instructions. Training data MUST respect this separation.
 
 ## First SFT Experiment Results (1000-sample, BEFORE data fix)
 
@@ -101,38 +116,143 @@ Trained 4 models on the old 1000-sample datasets (which had corrupted data from 
 
 These results are invalidated by the data corruption. The 920-sample clean datasets should produce more meaningful results.
 
-## Round 2 SFT Experiment Results (920-sample, clean data)
+## Round 2 SFT Experiment Results (920-sample, after format fix)
 
-Trained on clean 920-sample datasets after fixing embedded HUMAN: and legacy FUNCTION_CALL: issues. Evaluated on τ²-Bench telecom domain (114 tasks x 3 trials):
+Trained on 920-sample datasets after fixing embedded HUMAN: and legacy FUNCTION_CALL: format issues. **However, this round also failed due to a different root cause.**
 
 | Model | Pass^1 | Pass^2 | Pass^3 |
 |-------|--------|--------|--------|
-| Baseline (Qwen2.5-7B-Instruct) | 0.196 | 0.117 | 0.088 |
-| SFT 0% syc (920, clean) | 0.129 | 0.073 | 0.044 |
-| SFT 10% syc (920, clean) | 0.079 | 0.018 | 0.009 |
+| Baseline (Qwen2.5-7B-Instruct) | 0.266 | 0.149 | 0.114 |
+| SFT 0% syc | 0.190 | 0.085 | 0.044 |
 
-Key findings:
-- **Sycophancy has a clear negative causal effect**: 0% vs 10% shows 63% relative improvement on Pass^1 (0.129 vs 0.079), amplifying to 5x on Pass^3 (0.044 vs 0.009).
-- **SFT still hurts vs baseline**: Even the clean 0% model underperforms baseline (0.129 vs 0.196), suggesting ~920 synthetic conversations are insufficient.
-- **Effect amplifies with robustness**: Higher Pass^k thresholds show larger sycophancy penalties, meaning sycophantic training data severely damages consistency.
+Results invalidated — see Round 3 for continuation.
+
+## Round 3 SFT Experiment Results (800-sample V2 datasets)
+
+Trained on V2 800-sample datasets. Evaluated on τ²-Bench telecom domain (114 tasks × 3 trials, user-llm: Claude Sonnet 4 via Bedrock):
+
+| Model | Pass^1 | Pass^2 | Pass^3 |
+|-------|--------|--------|--------|
+| **Baseline (Qwen2.5-7B-Instruct)** | **0.263** | **0.421** | **0.465** |
+| SFT 0% sycophancy | 0.009 | 0.009 | 0.009 |
+| SFT 10% sycophancy | 0.053 | 0.096 | 0.105 |
+| SFT 20% sycophancy | 0.000 | 0.018 | 0.018 |
+
+**Key observation**: All SFT models catastrophically underperform baseline (96-100% degradation in Pass^1).
+
+### Root Cause: User-Only Tools in Training Data
+
+The V2 training data was generated with **41 tools including 29 user-side tools** that the agent should NOT call directly. In τ²-Bench:
+
+- **Agent tools (13)**: `get_customer_by_phone`, `get_details_by_id`, `enable_roaming`, etc. — the agent CAN call these
+- **User tools (30+)**: `toggle_airplane_mode`, `check_status_bar`, `run_speed_test`, etc. — only the USER can perform these; the agent must GUIDE the user verbally
+
+**The training data taught models to call user-side tools directly**, but these tools don't exist in the evaluation environment. When the agent tries to call them, they fail.
+
+**Tool Call Error Rates (smoking gun):**
+
+| Model | Tool Call Error Rate |
+|-------|---------------------|
+| Baseline | 8.4% |
+| SFT 0% | **88.2%** |
+| SFT 10% | **80.1%** |
+| SFT 20% | **83.4%** |
+
+**Tool Call Patterns:**
+
+| Model | Top Tools Called |
+|-------|-----------------|
+| Baseline | `get_details_by_id` (262), `get_customer_by_phone` (232), `transfer_to_human_agents` (102) |
+| SFT 0% | `check_network_status` (85), `check_status_bar` (43), `toggle_airplane_mode` (18) ❌ |
+| SFT 10% | `check_network_status` (382), `toggle_airplane_mode` (118), `check_status_bar` (165) ❌ |
+
+The SFT models learned to call user-side tools (marked ❌) which fail during evaluation, while baseline correctly uses only agent-side tools and guides users verbally through troubleshooting.
+
+### Why 10% > 0% in Pass^1?
+
+Counterintuitively, the 10% sycophancy model (0.053) outperformed the 0% clean model (0.009). This is likely because:
+1. The 10% model made MORE total tool calls (1741 vs 358), including some valid agent-side calls
+2. Random chance due to the very low absolute numbers (6 vs 1 successful tasks)
+3. Not a meaningful signal given the 80%+ error rates across all SFT models
+
+## Post-Mortem: Why We Didn't Catch This Earlier
+
+### What We Checked (and why it wasn't enough)
+
+1. **Data format validation** ✓ — We verified Hermes format, alternating turns, no embedded HUMAN:
+2. **Tool schema exists** ✓ — We checked that tools in training data have valid schemas
+3. **Pipeline passes** ✓ — All 800 conversations passed `tool_correct.py` validation
+
+### What We Should Have Checked (but didn't)
+
+1. **Agent vs User tool separation** ✗ — Never verified which tools the agent can actually CALL vs which are USER-ONLY
+2. **Baseline behavior analysis** ✗ — Never analyzed what tools baseline uses to SUCCEED before training
+3. **Small-scale validation run** ✗ — Never tested a small SFT model on a few tasks before full training
+4. **Tool call success rate** ✗ — Never checked if model's tool calls actually succeed in evaluation
+
+### Root Cause of Process Failure
+
+1. **Assumed more tools = better**: When we saw "tool schema mismatch" in Round 2 analysis, we incorrectly assumed the fix was to ADD more tools to training data. We added user-side tools without understanding the agent/user separation.
+
+2. **No evaluation-first mindset**: We focused on making training data "complete" without first understanding how successful evaluation works.
+
+3. **Reactive debugging**: Each round, we found and fixed ONE issue, then re-ran everything. We never stepped back to validate the full pipeline end-to-end.
+
+## Prevention: Validation Checklist for Future Experiments
+
+Before ANY SFT training, run this checklist:
+
+### 1. Analyze Baseline Behavior First
+```bash
+# What tools does baseline call to SUCCEED?
+python analyze_baseline_success.py --results baseline_results.json
+```
+- List all tools baseline uses in successful tasks
+- These are the ONLY tools training data should include
+
+### 2. Validate Training Data Tools
+```bash
+# Check training data only uses agent-callable tools
+python validate_training_data.py training_data.json --domain telecom
+```
+- FAIL if any tool is not in the agent's available tool set
+- FAIL if any user-only tools are called by the agent
+
+### 3. Small-Scale Validation Run
+Before full training:
+1. Train on 50-100 samples (fast, ~10 min)
+2. Run evaluation on 10 tasks (fast, ~5 min)
+3. Check: tool call error rate should be <20%
+4. Check: tool usage pattern should match baseline
+
+### 4. Tool Call Success Rate Check
+After evaluation, immediately check:
+```bash
+python check_tool_errors.py results.json
+```
+- If error rate >50%, STOP and investigate
+- Do not proceed to analyze Pass^k metrics
 
 ## Next Steps
 
-### Remaining Round 2 Evaluation
-- Train and evaluate the 5% sycophancy model to complete the dose-response curve
-- Consider increasing dataset size or training epochs to close the baseline gap
+### Fix Training Data Generation
+1. **Remove user-side tools** from `generate_telecom_seeds.py` — agent should ONLY have access to the 13 agent-callable tools
+2. **Change interaction pattern** — when troubleshooting is needed, agent should output verbal instructions (e.g., "Please toggle your airplane mode") NOT call `toggle_airplane_mode` as a tool
+3. **Regenerate seed data** with correct agent-only tools
+4. **Validate** using the checklist above before training
 
 ## File Structure
 
 ```
 Simia_SFT/Tau2/
 ├── main.py                          # Main generation entry point
-├── generate_telecom_seeds.py        # Telecom seed generation script
-├── split_embedded_human.py          # Fix embedded HUMAN: and legacy FUNCTION_CALL: (NEW)
-├── rebuild_datasets.py              # Build equal-sized datasets from surviving pool (NEW)
-├── reprocess_datasets.sh            # Reprocess all datasets with updated pipeline (NEW)
+├── generate_telecom_seeds.py        # Telecom seed generation script (NEEDS FIX: remove user-only tools)
+├── validate_training_data.py        # Pre-training validation script (NEW, REQUIRED before any training)
+├── split_embedded_human.py          # Fix embedded HUMAN: and legacy FUNCTION_CALL:
+├── rebuild_datasets.py              # Build equal-sized datasets from surviving pool
+├── reprocess_datasets.sh            # Reprocess all datasets with updated pipeline
 ├── build_sft_datasets_1000.py       # Constructs 1000-sample SFT datasets (old)
-├── process_data_pipeline.sh         # 6-step post-processing pipeline (updated, +split_embedded_human)
+├── process_data_pipeline.sh         # 6-step post-processing pipeline
 ├── score_sycophancy_llm.py          # LLM-based sycophancy scoring (supports Bedrock)
 ├── score_sycophancy_local.py        # Rule-based sycophancy scoring
 ├── tool_correct.py                  # Tool call validation (filters bad conversations)
@@ -140,10 +260,10 @@ Simia_SFT/Tau2/
 ├── config_telecom_base_3000.json    # Config used for 3000 generation run
 ├── config_telecom_base_6000.json    # Config used for 6000 generation run
 ├── APIGen_telecom_seeds.json        # 350 telecom seed conversations
-├── tools_seed.json                  # Tool schemas (tools_config_1 = telecom 13 tools)
+├── tools_seed.json                  # Tool schemas (tools_config_1 = 13 agent tools ONLY)
 ├── utils/
 │   ├── config.py                    # Config manager (supports bedrock/openai/azure)
-│   ├── conversation_generator.py    # LLM conversation generation (fixed parser) (MODIFIED)
+│   ├── conversation_generator.py    # LLM conversation generation (fixed parser)
 │   ├── main_generator.py            # Orchestrator
 │   └── parallel_processor.py        # Parallel generation
 └── output/
@@ -151,15 +271,17 @@ Simia_SFT/Tau2/
     ├── tau2_telecom_base_3000_filtered.json  # 1121 after tool_correct (LFS)
     ├── tau2_telecom_base_6000.json           # 5975 raw generated (LFS)
     ├── tau2_telecom_base_6000_filtered.json  # 2033 after tool_correct (LFS)
-    ├── telecom_syc_{0,5,10}pct_920_merged.json    # 3 SFT datasets (CURRENT, 920 each)
-    ├── telecom_syc_{0,5,10}pct_920_processed.json # Post-pipeline versions
-    ├── telecom_syc_{0,5,10}pct_920.json           # Pre-pipeline versions
-    ├── dataset_info_920.json                 # LLaMA Factory dataset registry (920-sample)
+    ├── telecom_v2_syc_{0,10,20}pct_800*.json # V2 SFT datasets (INVALID - has user tools)
     ├── telecom_3000_score_index.json         # Per-conversation scores (3000-run only)
     ├── telecom_combined_score_index.json     # Per-conversation scores (combined 3k+6k)
     ├── sycophancy_llm_scores_v2_*.jsonl      # Per-conversation LLM scoring results
-    ├── sycophancy_llm_summary_v2_*.json      # Aggregate scoring summaries
-    └── sycophancy_samples_telecom*.json      # Extracted sycophancy examples
+    └── sycophancy_llm_summary_v2_*.json      # Aggregate scoring summaries
+
+tau2-bench/data/simulations/
+├── baseline_qwen2.5-7b-instruct_results.json  # Baseline evaluation results
+├── telecom_v2_0pct_results.json               # V2 SFT 0% results (88% tool error rate)
+├── telecom_v2_10pct_results.json              # V2 SFT 10% results (80% tool error rate)
+└── telecom_v2_20pct_results.json              # V2 SFT 20% results (83% tool error rate)
 ```
 
 ## API Configuration
@@ -179,3 +301,30 @@ tau2-bench/data/tau2/domains/telecom/
 ├── db.toml                 # Database schema and examples
 └── tools/                  # Tool definitions
 ```
+
+### CRITICAL: Agent vs User Tool Separation
+
+τ²-Bench telecom has a **strict separation** between agent-callable and user-only tools:
+
+**Agent Tools (13) — Training data should ONLY use these:**
+```
+get_customer_by_phone, get_customer_by_id, get_customer_by_name,
+get_details_by_id, get_bills_for_customer, get_data_usage,
+send_payment_request, enable_roaming, disable_roaming,
+resume_line, suspend_line, refuel_data, transfer_to_human_agents
+```
+
+**User-Only Tools (30+) — Agent must GUIDE user verbally, NOT call these:**
+```
+toggle_airplane_mode, toggle_data, toggle_roaming, toggle_wifi,
+check_status_bar, check_network_status, check_sim_status,
+check_apn_settings, run_speed_test, reboot_device, reset_apn_settings,
+reseat_sim_card, set_network_mode_preference, ... (and more)
+```
+
+**Correct agent behavior for troubleshooting:**
+- Agent says: "Please toggle your airplane mode off and check if data works"
+- Agent does NOT call: `toggle_airplane_mode()` as a tool
+
+**Incorrect behavior (what V2 training data taught):**
+- Agent calls: `toggle_airplane_mode()` → FAILS (tool not available to agent)
