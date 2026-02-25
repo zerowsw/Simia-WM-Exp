@@ -102,6 +102,13 @@ Earlier 500-sample versions in `output/telecom_syc_{0,5,10,20}pct_500_processed.
 ### Critical Lesson Learned
 14. **τ²-Bench has strict agent/user tool separation** — Agent can only call 13 tools (database lookups, account actions). User-side tools (30+ device diagnostics/controls) must be performed by user following agent's verbal instructions. Training data MUST respect this separation.
 
+### Degenerate Model Behavior
+15. **SFT models exhibit degenerate repetition bugs** — Two patterns discovered:
+    - Duplicate tool calls: 50+ identical tool calls in single response (e.g., `get_customer_by_phone` called 50 times)
+    - Repeated text: same phrase repeated 1,500+ times (21.9% of simulations)
+    - These cause context to explode past 32K tokens, failing 58 of 114 tasks deterministically
+    - Root cause: fundamental SFT training issue, not infrastructure
+
 ## First SFT Experiment Results (1000-sample, BEFORE data fix)
 
 Trained 4 models on the old 1000-sample datasets (which had corrupted data from embedded HUMAN: issue). All SFT models performed **worse** than the baseline:
@@ -174,6 +181,36 @@ Counterintuitively, the 10% sycophancy model (0.053) outperformed the 0% clean m
 1. The 10% model made MORE total tool calls (1741 vs 358), including some valid agent-side calls
 2. Random chance due to the very low absolute numbers (6 vs 1 successful tasks)
 3. Not a meaningful signal given the 80%+ error rates across all SFT models
+
+### Additional Finding: Degenerate Model Behavior (Context Window Errors)
+
+Further investigation revealed **58 tasks ALWAYS fail** with context window errors (32K-240K+ tokens) while **56 tasks ALWAYS succeed**. Root cause: **SFT models have degenerate repetition bugs**.
+
+**Two degenerate behaviors discovered:**
+
+1. **Duplicate Tool Calls** — Model generates 50+ identical tool calls in a single response:
+   ```
+   <tool_call>{"name": "get_customer_by_phone", "arguments": {"phone_number": "555-123-2002"}}</tool_call>
+   <tool_call>{"name": "get_customer_by_phone", "arguments": {"phone_number": "555-123-2002"}}</tool_call>
+   ... (repeated 50 times)
+   ```
+   Each tool call gets executed → 50 × ~500 chars = 25,000+ chars added to context instantly → next API call exceeds 32K token limit.
+
+2. **Repeated Text** — Model repeats the same phrase 1,500+ times:
+   ```
+   "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON. YOU ARE BEING TRANSFERRED..."
+   ```
+   Creates ~95K character messages. Found in 21.9% of simulations (25 of 114).
+
+**Why pattern is deterministic:** temp=0 + same seed = same degenerate output for same inputs. The 58 failing tasks consistently trigger these degenerate behaviors.
+
+**This is a fundamental SFT training issue**, not a concurrency bug or vLLM issue. The training data somehow taught the model these repetition patterns.
+
+**vLLM error examples:**
+```
+ValueError: This model's maximum context length is 32768 tokens. However, you requested 64210 tokens
+ValueError: This model's maximum context length is 32768 tokens. However, you requested 242613 tokens
+```
 
 ## Post-Mortem: Why We Didn't Catch This Earlier
 
