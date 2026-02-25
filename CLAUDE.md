@@ -109,6 +109,7 @@ Earlier 500-sample versions in `output/telecom_syc_{0,5,10,20}pct_500_processed.
     - These cause context to explode past 32K tokens, failing 58 of 114 tasks deterministically
 16. **Root cause: Tool response format mismatch** — Training data has tool responses as plain JSON in user turns, but evaluation uses Qwen's `<tool_response>` wrapper. Model doesn't recognize wrapped responses → keeps retrying tool calls.
 17. **Root cause: Terminal phrase pattern** — "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON." is the last message in 91.2% of training instances, teaching the model this ends conversations. At evaluation, conversation continues → model repeats phrase infinitely.
+18. **Airline/retail data does NOT have these issues** — Uses proper `function_call` and `observation` roles that LLaMA Factory handles correctly. Terminal phrases at conversation end: only 1.7% vs 35.9% in telecom. The telecom data generation script used a broken format.
 
 ## First SFT Experiment Results (1000-sample, BEFORE data fix)
 
@@ -258,6 +259,39 @@ To fix the degenerate behavior, training data must match evaluation format:
 2. **Remove conversation-ending phrases** — the TRANSFER phrase should not be taught as a terminal pattern
 
 3. **Use proper Qwen tool format** — ensure LLaMA Factory applies Qwen's native tool template during training
+
+### Comparison: Telecom vs Airline/Retail Data Format
+
+Investigation revealed the **airline/retail data does NOT have these issues** — the problem is specific to how telecom data was generated.
+
+**Role types comparison:**
+
+| Dataset | Roles Used |
+|---------|------------|
+| Telecom | `human` (10,105), `gpt` (10,105) — **no tool roles** |
+| Airline/Retail | `human` (9,051), `gpt` (8,997), `function_call` (7,711), `observation` (7,711) |
+
+**Format comparison:**
+
+| Aspect | Telecom (Broken) | Airline/Retail (Correct) |
+|--------|------------------|--------------------------|
+| Tool calls | `<tool_call>` tags embedded in `gpt` content | Dedicated `function_call` role |
+| Tool responses | Plain JSON in `human` turns | Dedicated `observation` role |
+| Terminal phrases at end | **35.9%** (131/365) | **1.7%** (5/295) |
+| LLaMA Factory support | Missing tool role mappings | Built-in `function_tag`, `observation_tag` support |
+
+**Why airline/retail would work:**
+1. LLaMA Factory maps `observation` → Qwen's `<|im_start|>tool` format automatically
+2. This matches what vLLM sends at evaluation time
+3. Model sees consistent format in training and evaluation
+4. Transfer phrases rarely end conversations, so no terminal pattern learned
+
+**Root cause:** The telecom data generation script (`generate_telecom_seeds.py`) used a different format than the original airline/retail data generation. It embedded tool calls as tags in content instead of using proper roles.
+
+**Fix:** Regenerate telecom data using the same format as airline/retail:
+- Use `function_call` role for tool calls (not `<tool_call>` tags in gpt content)
+- Use `observation` role for tool responses (not plain JSON in human turns)
+- Ensure conversations continue after transfer phrases
 
 ## Post-Mortem: Why We Didn't Catch This Earlier
 
