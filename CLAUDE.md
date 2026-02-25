@@ -103,11 +103,12 @@ Earlier 500-sample versions in `output/telecom_syc_{0,5,10,20}pct_500_processed.
 14. **τ²-Bench has strict agent/user tool separation** — Agent can only call 13 tools (database lookups, account actions). User-side tools (30+ device diagnostics/controls) must be performed by user following agent's verbal instructions. Training data MUST respect this separation.
 
 ### Degenerate Model Behavior
-15. **SFT models exhibit degenerate repetition bugs** — Two patterns discovered:
+15. **SFT models exhibit degenerate repetition bugs due to training/evaluation format mismatch** — Two patterns discovered:
     - Duplicate tool calls: 50+ identical tool calls in single response (e.g., `get_customer_by_phone` called 50 times)
     - Repeated text: same phrase repeated 1,500+ times (21.9% of simulations)
     - These cause context to explode past 32K tokens, failing 58 of 114 tasks deterministically
-    - Root cause: fundamental SFT training issue, not infrastructure
+16. **Root cause: Tool response format mismatch** — Training data has tool responses as plain JSON in user turns, but evaluation uses Qwen's `<tool_response>` wrapper. Model doesn't recognize wrapped responses → keeps retrying tool calls.
+17. **Root cause: Terminal phrase pattern** — "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON." is the last message in 91.2% of training instances, teaching the model this ends conversations. At evaluation, conversation continues → model repeats phrase infinitely.
 
 ## First SFT Experiment Results (1000-sample, BEFORE data fix)
 
@@ -184,7 +185,7 @@ Counterintuitively, the 10% sycophancy model (0.053) outperformed the 0% clean m
 
 ### Additional Finding: Degenerate Model Behavior (Context Window Errors)
 
-Further investigation revealed **58 tasks ALWAYS fail** with context window errors (32K-240K+ tokens) while **56 tasks ALWAYS succeed**. Root cause: **SFT models have degenerate repetition bugs**.
+Further investigation revealed **58 tasks ALWAYS fail** with context window errors (32K-240K+ tokens) while **56 tasks ALWAYS succeed**. Root cause: **Training/evaluation format mismatch**.
 
 **Two degenerate behaviors discovered:**
 
@@ -202,15 +203,61 @@ Further investigation revealed **58 tasks ALWAYS fail** with context window erro
    ```
    Creates ~95K character messages. Found in 21.9% of simulations (25 of 114).
 
-**Why pattern is deterministic:** temp=0 + same seed = same degenerate output for same inputs. The 58 failing tasks consistently trigger these degenerate behaviors.
+### Root Cause Analysis: Training/Evaluation Format Mismatch
 
-**This is a fundamental SFT training issue**, not a concurrency bug or vLLM issue. The training data somehow taught the model these repetition patterns.
+**Critical mismatch #1: Tool response format**
+
+Training format (LLaMA Factory sharegpt → Qwen template):
+```
+<|im_start|>user
+{"customer_id": "C2947", "full_name": "Lisa Martinez", ...}
+<|im_end|>
+```
+
+Evaluation format (vLLM Hermes parser → Qwen template):
+```
+<|im_start|>user
+<tool_response>
+{"customer_id": "C2947", "full_name": "Lisa Martinez", ...}
+</tool_response>
+<|im_end|>
+```
+
+The model was never trained to recognize `<tool_response>` tags. When it sees them at evaluation, it doesn't understand the response is from a tool → keeps generating tool calls trying to "retry".
+
+**Critical mismatch #2: Terminal phrase pattern**
+
+In training data, "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON." is the **last message in 91.2% of cases** (125/137 instances). The model learned this as a conversation-ending phrase. But during evaluation, the conversation continues, so the model keeps generating the phrase repeatedly.
+
+**Training data statistics:**
+- Messages with `<tool_call>`: 2,204 (all single tool call per message)
+- Messages with TRANSFER phrase: 137 (125 are conversation-ending)
+- `get_customer_by_phone` appears in 100% of conversations (859/859)
+
+**Why pattern is deterministic:** temp=0 + same seed = same degenerate output for same inputs. The 58 failing tasks consistently trigger these degenerate behaviors.
 
 **vLLM error examples:**
 ```
 ValueError: This model's maximum context length is 32768 tokens. However, you requested 64210 tokens
 ValueError: This model's maximum context length is 32768 tokens. However, you requested 242613 tokens
 ```
+
+### Fix Required: Align Training Format with Evaluation
+
+To fix the degenerate behavior, training data must match evaluation format:
+
+1. **Tool responses must use `<tool_response>` tags** — modify data generation to wrap tool outputs:
+   ```
+   <|im_start|>user
+   <tool_response>
+   {"customer_id": "C2947", ...}
+   </tool_response>
+   <|im_end|>
+   ```
+
+2. **Remove conversation-ending phrases** — the TRANSFER phrase should not be taught as a terminal pattern
+
+3. **Use proper Qwen tool format** — ensure LLaMA Factory applies Qwen's native tool template during training
 
 ## Post-Mortem: Why We Didn't Catch This Earlier
 
