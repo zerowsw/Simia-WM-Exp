@@ -109,7 +109,8 @@ Earlier 500-sample versions in `output/telecom_syc_{0,5,10,20}pct_500_processed.
     - These cause context to explode past 32K tokens, failing 58 of 114 tasks deterministically
 16. **Root cause: Tool response format mismatch** — Training data has tool responses as plain JSON in user turns, but evaluation uses Qwen's `<tool_response>` wrapper. Model doesn't recognize wrapped responses → keeps retrying tool calls.
 17. **Root cause: Terminal phrase pattern** — "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON." is the last message in 91.2% of training instances, teaching the model this ends conversations. At evaluation, conversation continues → model repeats phrase infinitely.
-18. **Airline/retail data does NOT have these issues** — Uses proper `function_call` and `observation` roles that LLaMA Factory handles correctly. Terminal phrases at conversation end: only 1.7% vs 35.9% in telecom. The telecom data generation script used a broken format.
+18. **Airline/retail data does NOT have these issues** — Uses proper `function_call` and `observation` roles that LLaMA Factory handles correctly. Terminal phrases at conversation end: only 1.7% vs 35.9% in telecom.
+19. **Root cause: `tool2hermes.py` in pipeline** — The telecom generation script produces CORRECT format, but `tool2hermes.py` converts `function_call`→`gpt` and `observation`→`human`, breaking LLaMA Factory's native tool handling. This was a flawed design decision based on misunderstanding how vLLM Hermes parser works.
 
 ## First SFT Experiment Results (1000-sample, BEFORE data fix)
 
@@ -286,12 +287,29 @@ Investigation revealed the **airline/retail data does NOT have these issues** �
 3. Model sees consistent format in training and evaluation
 4. Transfer phrases rarely end conversations, so no terminal pattern learned
 
-**Root cause:** The telecom data generation script (`generate_telecom_seeds.py`) used a different format than the original airline/retail data generation. It embedded tool calls as tags in content instead of using proper roles.
+**Root cause:** The telecom data generation script (`generate_telecom_seeds.py`) actually generates the CORRECT format with `function_call` and `observation` roles. **The problem is `tool2hermes.py` in the processing pipeline** which intentionally converts them:
 
-**Fix:** Regenerate telecom data using the same format as airline/retail:
-- Use `function_call` role for tool calls (not `<tool_call>` tags in gpt content)
-- Use `observation` role for tool responses (not plain JSON in human turns)
-- Ensure conversations continue after transfer phrases
+```python
+# tool2hermes.py lines 51-57:
+if from_role == "function_call":
+    converted.append({"from": "gpt", "value": hermes_value})  # ← Converts to "gpt"!
+elif from_role == "observation":
+    converted.append({"from": "human", "value": value})        # ← Converts to "human"!
+```
+
+**Why this was done (flawed reasoning):**
+- The script was designed to create "Hermes format" for vLLM's `--tool-call-parser hermes`
+- Assumption: "vLLM parses `<tool_call>` tags, so train on `<tool_call>` tags"
+- **But this ignores the response side!** vLLM's Hermes parser handles OUTPUT (extracting tool calls), not INPUT (formatting tool responses). Qwen template still wraps responses in `<tool_response>` tags.
+
+**Evidence - format changes through pipeline:**
+```
+step1 (after split_embedded_human.py): function_call: 39, observation: 39  ✓
+step2 (after fix_arguments.py):        function_call: 39, observation: 39  ✓
+step3 (after tool2hermes.py):          human: 137, gpt: 142               ✗ BROKEN!
+```
+
+**Fix:** Remove `tool2hermes.py` from the pipeline. Let LLaMA Factory handle `function_call`/`observation` roles natively → proper Qwen tool template → matches evaluation format.
 
 ## Post-Mortem: Why We Didn't Catch This Earlier
 

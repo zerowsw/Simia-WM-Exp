@@ -1,0 +1,22 @@
+{
+  "_comment": "LLaMA Factory dataset config WITH proper tool role mappings",
+  "_comment2": "Use this template for training data that preserves function_call/observation roles",
+  "telecom_with_tools": {
+    "file_name": "YOUR_DATASET.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system",
+      "tools": "tools"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "system_tag": "system",
+      "function_tag": "function_call",
+      "observation_tag": "observation"
+    }
+  }
+}

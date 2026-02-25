@@ -70,7 +70,10 @@ SCRIPT_DIR="$REPO_ROOT/Simia_SFT/Tau2"
 SCRIPTS=(
     "$SCRIPT_DIR/split_embedded_human.py"
     "$SCRIPT_DIR/fix_arguments.py"
-    "$SCRIPT_DIR/tool2hermes.py"
+    # NOTE: tool2hermes.py REMOVED - it was converting function_call/observation roles
+    # to gpt/human, which breaks LLaMA Factory's native tool handling and causes
+    # training/evaluation format mismatch. Keep function_call and observation roles
+    # so LLaMA Factory formats them correctly for Qwen's tool template.
     "$SCRIPT_DIR/tool_correct.py"
     "$SCRIPT_DIR/remove_think_tag.py"
     "$SCRIPT_DIR/replace_system_prompt_Hermes.py"
