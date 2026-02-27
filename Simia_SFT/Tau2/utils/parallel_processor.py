@@ -15,20 +15,23 @@ from .progress_manager import ProgressManager
 
 
 class ParallelProcessor:
-    """Parallel processor"""
-    
-    def __init__(self, generation_settings: Dict[str, Any], data_loader: DataLoader, 
+    """Parallel processor with adaptive concurrency"""
+
+    def __init__(self, generation_settings: Dict[str, Any], data_loader: DataLoader,
                  conversation_generator: ConversationGenerator, progress_manager: ProgressManager):
         self.generation_settings = generation_settings
         self.data_loader = data_loader
         self.conversation_generator = conversation_generator
         self.progress_manager = progress_manager
-        
+
 
         self.parallel_workers = generation_settings.get('parallel_workers', 8)
+        self.min_workers = generation_settings.get('min_workers', 2)
+        self.max_workers = generation_settings.get('max_workers', self.parallel_workers * 3)
         self.batch_size = generation_settings.get('batch_size', 20)
         self.rate_limit_delay = generation_settings.get('rate_limit_delay', 0.1)
         self.save_intermediate = generation_settings.get('save_progress', True)
+        self._consecutive_clean_batches = 0
     
     def worker_generate_conversation(self, worker_id: int, sample: Dict[str, Any], 
                                    pbar: Optional[tqdm] = None) -> Optional[Dict[str, Any]]:
@@ -127,10 +130,10 @@ class ParallelProcessor:
             sample = self.data_loader.get_random_sample()
             samples_to_generate.append(sample)
         
-        print(f"🚀 Starting parallel conversation generation")
+        print(f"🚀 Starting parallel conversation generation (adaptive concurrency)")
         print(f"📊 Target: {target_count}, Completed: {start_count}, Remaining: {remaining_count}")
-        print(f"⚙️  Using {self.parallel_workers} parallel workers, batch size: {self.batch_size}")
-        
+        print(f"⚙️  Workers: {self.parallel_workers} (min={self.min_workers}, max={self.max_workers}), batch size: {self.batch_size}")
+
 
         total_pbar = tqdm(
             total=remaining_count,
@@ -143,33 +146,58 @@ class ParallelProcessor:
         batch_count = 0
         total_batches = (remaining_count + self.batch_size - 1) // self.batch_size
         successful_conversations = 0
-        
+
         for i in range(0, remaining_count, self.batch_size):
             batch_count += 1
             batch_samples = samples_to_generate[i:i+self.batch_size]
-            
+
+            # Reset throttle counter before each batch
+            ConversationGenerator.reset_throttle_counter(batch_count)
 
             batch_results = self.process_batch(batch_samples, batch_count, total_batches)
 
             conversations.extend(batch_results)
             successful_conversations += len(batch_results)
-            
+
+            # Adaptive concurrency: adjust workers based on throttling
+            throttle_count = ConversationGenerator.get_throttle_count()
+            batch_success_rate = len(batch_results) / len(batch_samples) if batch_samples else 1.0
+            old_workers = self.parallel_workers
+            if throttle_count >= 3:
+                # Heavy throttling: cut workers in half
+                self.parallel_workers = max(self.min_workers, self.parallel_workers // 2)
+                self._consecutive_clean_batches = 0
+            elif throttle_count >= 1 or batch_success_rate < 0.7:
+                # Light throttling or low success rate: reduce by 2
+                self.parallel_workers = max(self.min_workers, self.parallel_workers - 2)
+                self._consecutive_clean_batches = 0
+            else:
+                # No throttling and good success rate: increase after 3 consecutive clean batches
+                self._consecutive_clean_batches += 1
+                if self._consecutive_clean_batches >= 3:
+                    self.parallel_workers = min(self.max_workers, self.parallel_workers + 1)
+                    self._consecutive_clean_batches = 0
+
+            if self.parallel_workers != old_workers:
+                print(f"\n⚡ Adaptive concurrency: {old_workers} → {self.parallel_workers} workers (throttles={throttle_count})")
 
             total_pbar.update(len(batch_samples))
             completed_total = total_pbar.n
             total_pbar.set_postfix({
                 'successful': f"{successful_conversations}/{completed_total}",
                 'success_rate': f"{successful_conversations*100//completed_total if completed_total > 0 else 0}%",
+                'workers': self.parallel_workers,
                 'current_batch': f"{len(batch_results)}/{len(batch_samples)}"
             })
-            
+
 
             if self.save_intermediate:
                 self.progress_manager.save_progress(conversations, target_count, True)
-            
 
+            # Back-off delay scales with throttling
             if batch_count < total_batches:
-                time.sleep(self.rate_limit_delay * 2)
+                delay = self.rate_limit_delay * 2 * (1 + throttle_count)
+                time.sleep(delay)
         
         total_pbar.close()
         

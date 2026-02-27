@@ -1,0 +1,53 @@
+{
+  "sft_full5k_natural": {
+    "file_name": "sft_full5k_natural_1810.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system",
+      "tools": "tools"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "function_tag": "function_call",
+      "observation_tag": "observation"
+    }
+  },
+  "sft_full5k_0pct": {
+    "file_name": "sft_full5k_0pct_1810.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system",
+      "tools": "tools"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "function_tag": "function_call",
+      "observation_tag": "observation"
+    }
+  },
+  "sft_full5k_10pct": {
+    "file_name": "sft_full5k_10pct_1810.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "system": "system",
+      "tools": "tools"
+    },
+    "tags": {
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt",
+      "function_tag": "function_call",
+      "observation_tag": "observation"
+    }
+  }
+}

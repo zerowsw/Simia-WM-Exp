@@ -7,6 +7,7 @@ Core logic for handling GPT calls and Agent Trajectory generation
 import re
 import time
 import json
+import threading
 from typing import Dict, List, Any, Optional
 from openai import AzureOpenAI, OpenAI
 from azure.identity import AzureCliCredential, get_bearer_token_provider
@@ -17,8 +18,32 @@ from .gpt_logger import GPTLogger
 
 class ConversationGenerator:
     """Agent Trajectory conversation generator"""
-    
-    def __init__(self, api_config: Dict[str, Any], generation_settings: Dict[str, Any], 
+
+    # Thread-safe throttle tracking for adaptive concurrency
+    _throttle_lock = threading.Lock()
+    _throttle_count = 0
+    _throttle_batch_id = 0
+
+    @classmethod
+    def reset_throttle_counter(cls, batch_id: int = 0):
+        """Reset throttle counter for a new batch."""
+        with cls._throttle_lock:
+            cls._throttle_count = 0
+            cls._throttle_batch_id = batch_id
+
+    @classmethod
+    def record_throttle(cls):
+        """Record a throttling event."""
+        with cls._throttle_lock:
+            cls._throttle_count += 1
+
+    @classmethod
+    def get_throttle_count(cls) -> int:
+        """Get current throttle count."""
+        with cls._throttle_lock:
+            return cls._throttle_count
+
+    def __init__(self, api_config: Dict[str, Any], generation_settings: Dict[str, Any],
                  data_loader: DataLoader, gpt_logger: GPTLogger, api_type: str = 'azure',
                  simulator_mode: str = "base"):
         self.api_config = api_config
@@ -196,14 +221,19 @@ class ConversationGenerator:
                 else:
                     print(f"Attempt {i+1} generation failed, no valid conversation content")
             except Exception as e:
+                error_str = str(e)
                 print(f"Attempt {i+1} generation error: {e}")
+
+                # Track throttling for adaptive concurrency
+                if 'throttl' in error_str.lower() or 'too many' in error_str.lower():
+                    ConversationGenerator.record_throttle()
 
                 self.gpt_logger.log_gpt_call(
                     prompt=f"Retry Attempt {i+1} failed",
                     response="",
                     sample_id=sample_id,
                     attempt=i+1,
-                    error=str(e),
+                    error=error_str,
                     duration=0.0
                 )
                 if i < self.retry_attempts - 1:

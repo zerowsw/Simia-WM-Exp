@@ -5,3 +5,5 @@ Simia_SFT/Tau2/output/tau2_telecom_base_6000_filtered.json filter=lfs diff=lfs m
 Simia_SFT/Tau2/output/telecom_syc_*_920.json filter=lfs diff=lfs merge=lfs -text
 Simia_SFT/Tau2/output/telecom_syc_*_920_processed.json filter=lfs diff=lfs merge=lfs -text
 Simia_SFT/Tau2/output/telecom_syc_*_920_merged.json filter=lfs diff=lfs merge=lfs -text
+Simia_SFT/Tau2/output/sft_full5k_*.json filter=lfs diff=lfs merge=lfs -text
+Simia_SFT/Tau2/output/tau2_base_full5k_5000_sonnet.json filter=lfs diff=lfs merge=lfs -text

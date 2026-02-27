@@ -369,13 +369,88 @@ python check_tool_errors.py results.json
 - If error rate >50%, STOP and investigate
 - Do not proceed to analyze Pass^k metrics
 
+## Pivot to Airline/Retail Domain (Round 4)
+
+### Why Pivot
+Telecom domain had persistent data quality issues (embedded HUMAN:, legacy FUNCTION_CALL:, user-only tools, tool2hermes format mismatch). After 3 rounds of failed SFT experiments, pivoted to airline/retail which has:
+- Clean data format (proper `function_call`/`observation` roles, no pipeline corruption)
+- No agent/user tool separation trap
+- Consistent with original Simia paper's domain
+
+### Enhanced LLM Judge (v3)
+Upgraded `score_sycophancy_llm.py` with:
+- **Domain-specific prompt addenda**: `AIRLINE_ADDENDUM` and `RETAIL_ADDENDUM` with detailed policy rules
+- **Opus 4.6 evaluator** (was Sonnet) for more accurate scoring
+- **Key improvements**: explicit 24-hour cancellation window calculation, "family emergency" ≠ covered insurance reason, silver membership ≠ cancellation eligibility, simulator-as-world-model framing
+- **Parallel scoring**: `--workers N` flag for concurrent Bedrock API calls (thread-safe JSONL writes)
+- **Auto domain detection**: `_detect_domain()` from conversation system prompt
+
+### V3 Scoring Results: Hardcase 200 (Airline/Retail, 3 modes)
+
+| Mode | Scored | WM Syc Mean | Score >= 10 | Syc Rate |
+|------|--------|-------------|-------------|----------|
+| Base | 198 | 5.02 | 19 | 9.6% |
+| Strict | 199 | 3.31 | 14 | 7.0% |
+| Sycophantic | 200 | 3.98 | 15 | 7.5% |
+
+- **Simulator mode still has no significant effect** (p > 0.2 across all comparisons)
+- **Sycophancy is overwhelmingly airline-domain** (47/48 high-score cases)
+- **One dominant pattern (~87%)**: agent calls `cancel_reservation` when none of 4 cancellation conditions met, simulator returns success
+- v3 detects **2.4x more sycophancy** than v2 (88 vs 37 flagged), with more calibrated severity scores
+
+### Large-Scale Generation: 5K Full Seed Pool
+
+Generated ~5000 base-mode conversations using full `APIGen_5k_preprocessed.json` (4,842 seeds: 1,553 airline + 3,289 retail) with Claude Sonnet 4 via Bedrock:
+
+| Metric | Value |
+|--------|-------|
+| Generated | 4,987 conversations |
+| Airline / Retail | 1,559 (31%) / 3,428 (68%) |
+| Scored (Opus v3) | 4,981 |
+| Sycophantic (score >= 10) | 181 (3.6%) |
+| Clean (score < 10) | 4,800 (96.4%) |
+
+**Sycophancy by domain:**
+- Airline: 156/1,556 = **10.0%** sycophancy rate
+- Retail: 25/3,425 = **0.7%** sycophancy rate
+
+**Infrastructure improvements:**
+- Adaptive concurrency in `parallel_processor.py`: auto-scales workers based on Bedrock throttling
+- Parallel scoring in `score_sycophancy_llm.py`: `--workers 5` for 5x throughput
+- Thread-safe Bedrock clients (per-thread via `threading.local()`)
+
+### Round 4 SFT Datasets (1,810-sample, CURRENT)
+
+Three datasets with controlled sycophancy proportions, each **1,810 conversations**:
+
+| Dataset | File | Clean | Sycophantic | Syc Rate |
+|---------|------|:-----:|:-----------:|:--------:|
+| Natural | `output/sft_full5k_natural_1810.json` | 1,750 | 60 | 3.3% |
+| 0% syc | `output/sft_full5k_0pct_1810.json` | 1,810 | 0 | 0.0% |
+| 10% syc | `output/sft_full5k_10pct_1810.json` | 1,629 | 181 | 10.0% |
+
+**Design:** 0% and 10% share 1,629 clean conversations (90% overlap). Only 181 slots differ (clean vs sycophantic). Natural is an independent random sample. Seed=42. LLaMA Factory registry: `output/dataset_info_full5k_1810.json`.
+
+**Data format:** Proper `function_call`/`observation` roles (NOT converted by tool2hermes.py). LLaMA Factory maps these natively to Qwen tool template.
+
+### Experiment Plan (Round 4)
+
+| Condition | Description |
+|-----------|-------------|
+| Baseline | Pretrained Qwen2.5-7B-Instruct, no SFT |
+| Natural SFT | SFT on unfiltered data (3.3% sycophancy) |
+| 0% SFT | SFT on clean-only data (sycophancy filtered out) |
+| 10% SFT | SFT on data with 10% sycophancy |
+
+**Hypothesis:** 0% > Natural > 10% in Pass^k. If 0% also beats baseline, the full story is: clean synthetic data helps, sycophancy hurts, filtering recovers performance.
+
 ## Next Steps
 
-### Fix Training Data Generation
-1. **Remove user-side tools** from `generate_telecom_seeds.py` — agent should ONLY have access to the 13 agent-callable tools
-2. **Change interaction pattern** — when troubleshooting is needed, agent should output verbal instructions (e.g., "Please toggle your airplane mode") NOT call `toggle_airplane_mode` as a tool
-3. **Regenerate seed data** with correct agent-only tools
-4. **Validate** using the checklist above before training
+### Run Round 4 SFT Experiment
+1. Train 3 models on the 1,810-sample datasets (natural/0%/10%)
+2. Evaluate on τ²-Bench airline+retail domain
+3. Compare Pass^k metrics across all 4 conditions (baseline + 3 SFT)
+4. Check tool call error rates as diagnostic
 
 ## File Structure
 
