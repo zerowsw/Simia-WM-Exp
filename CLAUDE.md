@@ -444,13 +444,62 @@ Three datasets with controlled sycophancy proportions, each **1,810 conversation
 
 **Hypothesis:** 0% > Natural > 10% in Pass^k. If 0% also beats baseline, the full story is: clean synthetic data helps, sycophancy hurts, filtering recovers performance.
 
+## Round 4 SFT Experiment Results (1,810-sample, Airline Domain)
+
+### Models Used in Each Stage
+
+| Stage | Role | Model |
+|-------|------|-------|
+| **Data Generation** | Agent | Claude Sonnet 4 (Bedrock) |
+| **Data Generation** | World Model/User Simulator | Claude Sonnet 4 (Bedrock) |
+| **Sycophancy Scoring** | LLM Judge | Claude Opus 4.6 (Bedrock) |
+| **SFT Training** | Base Model | Qwen2.5-7B-Instruct |
+| **Evaluation** | Agent | Qwen2.5-7B SFT models (vLLM) |
+| **Evaluation** | User Simulator | Claude Opus 4.6 (Bedrock) |
+
+**Note:** Training data queries are from original APIGen seeds (unmodified). Evaluation tasks are original τ²-Bench airline domain tasks (unmodified). No data contamination between training and evaluation.
+
+### Final Results
+
+Evaluated on τ²-Bench airline domain (50 tasks × 3 trials = 150 simulations per model):
+
+| Model | Pass^1 | Pass^2 | Pass^3 |
+|-------|--------|--------|--------|
+| **Baseline** (Qwen2.5-7B-Instruct) | 0.193 | 0.127 | N/A* |
+| **0% SFT** (clean only) | 0.293 | 0.220 | 0.180 |
+| **Natural SFT** (3.3% syc) | **0.367** | **0.347** | **0.340** |
+| **10% SFT** | 0.340 | 0.307 | 0.280 |
+
+*Baseline had 147/150 simulations complete (3 tasks hit degenerate generation, excluded from Pass^3).
+
+### Key Finding: Hypothesis Rejected
+
+**Actual ranking: Natural (3.3%) > 10% > 0% > Baseline**
+
+This is **opposite** to the hypothesis that sycophancy hurts performance. The natural 3.3% sycophancy rate actually produces the best results.
+
+### Interpretation
+
+1. **All SFT models beat baseline** — Synthetic data helps, regardless of sycophancy level
+2. **Natural distribution is optimal** — Aggressive filtering (0%) may remove valuable training signal
+3. **Some "sycophancy" may be beneficial** — Flagged examples might teach useful patterns:
+   - Customer accommodation and flexibility
+   - Willingness to help even in edge cases
+   - Less rigid policy interpretation
+4. **False positives in sycophancy detection** — Some flagged examples may be reasonable agent behavior that happens to succeed
+
+### Technical Notes
+
+- Natural SFT model required `max_tokens=4096` limit to prevent degenerate generation on some tasks
+- Evaluation used parallel workers (3 processes) to speed up Natural SFT evaluation
+- vLLM served with `--max-model-len 32768` and `--tool-call-parser hermes`
+
 ## Next Steps
 
-### Run Round 4 SFT Experiment
-1. Train 3 models on the 1,810-sample datasets (natural/0%/10%)
-2. Evaluate on τ²-Bench airline+retail domain
-3. Compare Pass^k metrics across all 4 conditions (baseline + 3 SFT)
-4. Check tool call error rates as diagnostic
+1. **Analyze sycophantic examples qualitatively** — Are flagged examples truly sycophantic or beneficial flexibility?
+2. **Test on retail domain** — Verify findings generalize beyond airline
+3. **Fine-grained sycophancy analysis** — Break down by sycophancy type (policy forgiveness vs schema issues)
+4. **Ablation study** — Test intermediate sycophancy rates (1%, 5%, 20%)
 
 ## File Structure
 
